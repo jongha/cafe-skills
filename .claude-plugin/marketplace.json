@@ -9,7 +9,7 @@
     {
       "name": "cafe",
       "source": "./",
-      "description": "Mr. Latte's cafe for Claude Code. latte finishes what you order end to end."
+      "description": "Mr. Latte's cafe for Claude Code. /cafe:order finishes what you order end to end."
     }
   ]
 }

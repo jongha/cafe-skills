@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The cafe's cupping notes and verdict, used by the latte skill.
+"""The cafe's cupping notes and verdict, used by the order skill.
 
   cafe.py add <notes> <round> <event> [-s P0|P1|P2] [-t yes|no] <note>
   cafe.py check <notes> [--max-rounds N]
@@ -158,7 +158,7 @@ def judge(rows, max_rounds=MAX_ROUNDS):
     window = [stat[r]["serious"] for r in rounds if r > last_rebrew]
     if len(window) >= 3:
         a, b, c = window[-3:]
-        if c > 0 and b >= a and c >= b:
+        if a > 0 and b >= a and c >= b:
             reasons.append(f"P0/P1 defects are not going down: {a} -> {b} -> {c}")
             return "REBREW", reasons
     return "RECUP", reasons
@@ -192,6 +192,7 @@ def self_test():
         ("stall count restarts after rebrew", notes(*dirty(1, 1), *dirty(2, 1), *dirty(3, 1), (3, "rebrew", "-", "-"), *dirty(4, 1)), "RECUP"),
         ("the rebrew round is left out of the stall count", notes(*dirty(1, 1), *dirty(2, 1), (2, "rebrew", "-", "-"), *dirty(3, 1), *dirty(4, 1)), "RECUP"),
         ("zero defects in a row is not a stall", notes(*clean(1, tasted="no"), *clean(2, tasted="no"), *clean(3, tasted="no")), "RECUP"),
+        ("a first defect after rounds with none is not a stall", notes(*clean(1, tasted="no"), *clean(2, tasted="no"), *dirty(3, 1)), "RECUP"),
     ]
     failed = 0
     for name, rows, want in cases:

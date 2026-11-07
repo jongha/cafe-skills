@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="430" viewBox="0 0 960 430" role="img" aria-labelledby="t d">
+  <title id="t">How an order is made</title>
+  <desc id="d">Your order goes through recipe, brew, cupping, and serve. After each cupping round, cafe.py check gives a verdict: SERVE, RECUP, REBREW, or CLOSE.</desc>
+  <defs>
+    <marker id="a-brown" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8C7462"/></marker>
+    <marker id="a-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2E7D4F"/></marker>
+    <marker id="a-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#B7791F"/></marker>
+    <marker id="a-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#B23A3A"/></marker>
+    <marker id="a-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7B808A"/></marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5B4636; }
+    .h1 { font-size: 20px; font-weight: 700; fill: #3B2A20; }
+    .sub { font-size: 13px; fill: #7A6656; }
+    .title { font-size: 15px; font-weight: 700; fill: #3B2A20; }
+    .line { font-size: 12.5px; }
+    .num { font-size: 12px; font-weight: 700; fill: #FFFFFF; }
+    .verdict { font-size: 11.5px; font-weight: 700; letter-spacing: 0.6px; }
+    .chip { font-size: 11.5px; font-weight: 700; letter-spacing: 0.6px; fill: #FFFFFF; }
+    .card { font-size: 12px; }
+  </style>
+
+  <rect x="0.5" y="0.5" width="959" height="429" rx="16" fill="#FBF7F2" stroke="#E9DFD3"/>
+  <text x="36" y="44" class="h1">How an order is made</text>
+  <text x="36" y="66" class="sub">Nothing is served until the judge script says so.</text>
+
+  <!-- order -->
+  <rect x="36" y="100" width="160" height="100" rx="12" fill="#3B2A20"/>
+  <text x="54" y="127" class="title" style="fill:#FFFFFF">Your order</text>
+  <text x="54" y="155" class="line" style="fill:#F3E9DC">“add CSV export”</text>
+  <text x="54" y="175" class="line" style="fill:#F3E9DC">or “finish this branch”</text>
+
+  <!-- recipe -->
+  <rect x="218" y="100" width="160" height="100" rx="12" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <circle cx="240" cy="122" r="11" fill="#6F4E37"/><text x="240" y="126.5" class="num" text-anchor="middle">1</text>
+  <text x="258" y="127" class="title">Recipe</text>
+  <text x="234" y="155" class="line">acceptance criteria</text>
+  <text x="234" y="175" class="line">+ claim rehearsal</text>
+
+  <!-- brew -->
+  <rect x="400" y="100" width="160" height="100" rx="12" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <circle cx="422" cy="122" r="11" fill="#6F4E37"/><text x="422" y="126.5" class="num" text-anchor="middle">2</text>
+  <text x="440" y="127" class="title">Brew</text>
+  <text x="416" y="155" class="line">checks first,</text>
+  <text x="416" y="175" class="line">then small units</text>
+
+  <!-- cupping -->
+  <rect x="582" y="100" width="160" height="100" rx="12" fill="#FFF8EF" stroke="#C08552" stroke-width="1.5"/>
+  <circle cx="604" cy="122" r="11" fill="#6F4E37"/><text x="604" y="126.5" class="num" text-anchor="middle">3</text>
+  <text x="622" y="127" class="title">Cupping</text>
+  <text x="598" y="155" class="line">3 fresh cuppers</text>
+  <text x="598" y="175" class="line">viewpoint × method</text>
+
+  <!-- serve -->
+  <rect x="764" y="100" width="160" height="100" rx="12" fill="#F0F7F2" stroke="#2E7D4F" stroke-width="1.5"/>
+  <circle cx="786" cy="122" r="11" fill="#2E7D4F"/><text x="786" y="126.5" class="num" text-anchor="middle">4</text>
+  <text x="804" y="127" class="title">Serve</text>
+  <text x="780" y="155" class="line">first-time customer</text>
+  <text x="780" y="175" class="line">checks the real thing</text>
+
+  <!-- forward arrows -->
+  <path d="M199 150H214" stroke="#8C7462" stroke-width="2" marker-end="url(#a-brown)"/>
+  <path d="M381 150H396" stroke="#8C7462" stroke-width="2" marker-end="url(#a-brown)"/>
+  <path d="M563 150H578" stroke="#8C7462" stroke-width="2" marker-end="url(#a-brown)"/>
+  <path d="M745 150H760" stroke="#2E7D4F" stroke-width="2" marker-end="url(#a-green)"/>
+  <text x="753" y="92" class="verdict" text-anchor="middle" style="fill:#2E7D4F">SERVE</text>
+
+  <!-- RECUP loop over cupping -->
+  <path d="M706 98C706 60 618 60 618 94" fill="none" stroke="#B7791F" stroke-width="2" marker-end="url(#a-amber)"/>
+  <text x="662" y="54" class="verdict" text-anchor="middle" style="fill:#B7791F">RECUP</text>
+
+  <!-- REBREW back to brew -->
+  <path d="M624 202C624 250 480 250 480 206" fill="none" stroke="#B23A3A" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a-red)"/>
+  <text x="552" y="264" class="verdict" text-anchor="middle" style="fill:#B23A3A">REBREW</text>
+
+  <!-- CLOSE to serve -->
+  <path d="M708 202C708 250 844 250 844 206" fill="none" stroke="#7B808A" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#a-gray)"/>
+  <text x="776" y="264" class="verdict" text-anchor="middle" style="fill:#7B808A">CLOSE</text>
+
+  <!-- verdict cards -->
+  <text x="36" y="296" class="sub">After each round, <tspan style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill:#3B2A20">cafe.py check</tspan> gives the verdict, before anything is fixed.</text>
+
+  <rect x="36" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <rect x="50" y="324" width="62" height="22" rx="11" fill="#2E7D4F"/><text x="81" y="339" class="chip" text-anchor="middle">SERVE</text>
+  <text x="50" y="364" class="card">Two clean rounds in a row:</text>
+  <text x="50" y="380" class="card">no P0/P1, 3+ cuppers,</text>
+  <text x="50" y="396" class="card">at least one actually ran it.</text>
+
+  <rect x="262" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <rect x="276" y="324" width="62" height="22" rx="11" fill="#B7791F"/><text x="307" y="339" class="chip" text-anchor="middle">RECUP</text>
+  <text x="276" y="364" class="card">Fix every defect at its cause,</text>
+  <text x="276" y="380" class="card">add a regression test,</text>
+  <text x="276" y="396" class="card">taste it again next round.</text>
+
+  <rect x="488" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <rect x="502" y="324" width="72" height="22" rx="11" fill="#B23A3A"/><text x="538" y="339" class="chip" text-anchor="middle">REBREW</text>
+  <text x="502" y="364" class="card">P0/P1 stopped going down.</text>
+  <text x="502" y="380" class="card">Stop patching and</text>
+  <text x="502" y="396" class="card">recheck the design.</text>
+
+  <rect x="714" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
+  <rect x="728" y="324" width="62" height="22" rx="11" fill="#7B808A"/><text x="759" y="339" class="chip" text-anchor="middle">CLOSE</text>
+  <text x="728" y="364" class="card">Five rounds, no SERVE.</text>
+  <text x="728" y="380" class="card">Report it did not converge.</text>
+  <text x="728" y="396" class="card">The bar is never lowered.</text>
+</svg>

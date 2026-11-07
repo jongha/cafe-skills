@@ -84,6 +84,14 @@ AI-built work has a familiar loop. You review it and find problems. You fix them
 
 **Before you walk away.** Claude Code still asks before commands it has not been allowed to run. Use auto mode, or allow your build and test commands with `/permissions`, so the run does not wait on a prompt. The result stays uncommitted unless your order asks for a commit or a push.
 
+### What comes back
+
+<p align="center">
+  <img src="assets/receipt.svg" alt="A finished order for the pagination fix, drawn as a cafe receipt. Verdict SERVE after 4 rounds and 12 cuppers. Cupping: R1 found 2 P1 defects and R2 found 1, all fixed, then R3 and R4 were clean. Each of the 3 acceptance criteria passes with the command that proves it. Changed 3 files, uncommitted. Left for you: commit and push. Then the assumption it made, a P2 risk it left, a next order, and a new house note." width="100%">
+</p>
+
+The change waits in your working tree, uncommitted unless your order asked for a commit. With it comes a receipt in your terminal: the verdict and the rounds it took, each acceptance criterion with the command that proves it, what changed, what is left for you, the choices it made instead of asking, the risks it left, ideas for a next order, and new house notes. If five rounds pass without SERVE, the receipt says CLOSE and lists each defect still open with its repro command.
+
 ### Files
 
 ```
@@ -175,6 +183,14 @@ AI 로 만든 결과물은 리뷰할 때마다 새 문제가 나옵니다. 고�
 작업 기록은 프로젝트 루트의 `.cafe/` 에 남습니다. 주문마다 폴더가 하나씩 생기고, 그 안에 `recipe.md`, `cupping.tsv`, `scratch/` 가 들어갑니다. 주문 폴더는 git 에서 뺍니다. `house-notes.md` 는 모든 주문이 함께 쓰는 파일이라 팀과 나누도록 커밋해도 됩니다. 중간에 멈췄다면 같은 주문을 다시 내면 멈춘 곳부터 이어 갑니다.
 
 **자리를 비우기 전에.** Claude Code 는 아직 허용하지 않은 명령을 실행하기 전에 묻습니다. auto mode 를 쓰거나, `/permissions` 로 빌드와 테스트 명령을 허용해 두어야 실행이 확인 창에서 멈추지 않습니다. 결과는 커밋하지 않은 상태로 남습니다. 커밋이나 푸시는 주문에 적었을 때만 합니다.
+
+### 돌려받는 것
+
+<p align="center">
+  <img src="assets/receipt.svg" alt="페이지네이션 수정 주문이 끝난 모습을 카페 영수증으로 그렸습니다. 4라운드, 커퍼 12명을 거쳐 SERVE 판정을 받았습니다. 커핑: R1 에서 P1 디펙트 2개, R2 에서 1개가 나와 모두 고쳤고, R3 과 R4 는 깨끗했습니다. 수용 기준 3개가 모두 PASS 이고, 각각 증명한 명령이 붙어 있습니다. 파일 3개가 바뀌었고 커밋하지 않았습니다. 사용자에게 남긴 일은 커밋과 푸시입니다. 이어서 정한 가정, 남겨 둔 P2 위험, 다음 주문, 새 하우스 노트가 있습니다." width="100%">
+</p>
+
+바뀐 내용은 작업 트리에 그대로 있고, 주문에 커밋을 적지 않았다면 커밋하지 않습니다. 함께 터미널에 영수증이 나옵니다. 판정과 걸린 라운드, 수용 기준마다 그것을 증명한 명령, 바뀐 파일, 사용자에게 남긴 일, 묻지 않고 정한 가정, 남겨 둔 위험, 다음 주문 거리, 새 하우스 노트가 들어갑니다. 5라운드를 마치고도 SERVE 가 나오지 않으면 영수증에 CLOSE 가 찍히고, 아직 열린 디펙트를 재현 명령과 함께 적습니다.
 
 ### 파일
 

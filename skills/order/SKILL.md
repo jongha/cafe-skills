@@ -111,12 +111,26 @@ For each round R, starting at 1:
 1. Serve a first-time customer. Give a fresh subagent that never saw the work only recipe.md, the result, and cupping.tsv. It checks each acceptance criterion on the real thing and reports PASS or FAIL with evidence. It also rechecks every `drop` and P2 row and says which ones really are P0 or P1 in real use.
 2. If anything fails or turns out to be P0 or P1, reproduce it, log it as `defect -s P0|P1` under the last round, add a house note, run `cafe.py check`, and follow the verdict.
 3. On SERVE, do the irreversible steps the order asked for, such as a commit and a push. After CLOSE, leave them for the user.
-4. Report:
-   - Order: the goal in your own words
-   - Verdict: SERVE or CLOSE, and the number of rounds
-   - Evidence for each acceptance criterion
-   - Assumptions you made, and the options you did not pick
-   - Left for the user: irreversible steps the order did not ask for, or that CLOSE held back
-   - Remaining risks and next orders
-   - Lines added to the house notes
+4. Hand over the receipt. Fill in this template, with the labels in the user's language. Write "none" for an empty item.
+
+   ```markdown
+   ## Order up: <the goal in your own words>
+
+   **SERVE** · <rounds> rounds · <cup rows> cuppers · notes in `.cafe/<order>/`
+
+   Cupping: <each round line from the last cafe.py check, such as R1 2 P0/P1 defects · R2 clean · R3 clean>
+
+   | # | Acceptance criterion | Result | Evidence |
+   |---|---|---|---|
+   | 1 | <criterion> | PASS | `<command>` → <the output that proves it> |
+
+   - **Changed:** <files>, +<added> −<removed>, <uncommitted, or the commit and where it was pushed>
+   - **Left for you:** <irreversible steps the order did not ask for, or that CLOSE held back>
+   - **Assumed:** <each choice you made>, not <the option you did not pick>
+   - **Remaining risks:** <each P2 left, and what it costs>
+   - **Next orders:** <ideas outside the recipe>
+   - **House notes:** <lines this order added>
+   ```
+
+   After CLOSE, the heading is `## Order closed: <goal>`, the verdict is **CLOSE**, and the list starts with **Open defects:** each open P0 or P1 with its repro command.
 

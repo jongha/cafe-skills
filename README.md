@@ -76,7 +76,7 @@ Requires Python 3 and a coding host with project access. Full verification also 
 /plugin install cafe@cafe-skills
 ```
 
-**Turn on auto-update.** Claude Code leaves auto-update off for marketplaces outside Anthropic. Run `/plugin`, open **Marketplaces**, select `cafe-skills`, and choose **Enable auto-update**. Claude Code then checks for a new version soon after a session starts, and the update loads with `/reload-plugins` or the next launch. Without auto-update, update by hand with `claude plugin update cafe@cafe-skills`.
+**Turn on auto-update.** Claude Code leaves auto-update off for marketplaces outside Anthropic. Run `/plugin`, open **Marketplaces**, select `cafe-skills`, and choose **Enable auto-update**. Claude Code then checks for a new version soon after a session starts, and the update loads with `/reload-plugins` or the next launch. To update right away, or if you installed before auto-update was on, choose **Update marketplace** on the same screen. It fetches the latest listing and updates `cafe`. From a shell, run `claude plugin marketplace update cafe-skills`, then `claude plugin update cafe@cafe-skills`.
 
 **Standalone skill** — clone this repository, then choose your host:
 
@@ -227,7 +227,7 @@ Python 3와 프로젝트 파일에 접근할 수 있는 코딩 도구가 필요�
 /plugin install cafe@cafe-skills
 ```
 
-**자동 업데이트를 켜세요.** Claude Code는 Anthropic 밖의 마켓플레이스에 대해 자동 업데이트를 꺼 둡니다. `/plugin`을 실행해 **Marketplaces**에서 `cafe-skills`를 고르고 **Enable auto-update**를 선택하세요. 그러면 세션을 시작하고 얼마 뒤 새 버전을 확인하고, 업데이트는 `/reload-plugins`를 하거나 다음에 실행할 때 적용됩니다. 자동 업데이트를 켜지 않았다면 `claude plugin update cafe@cafe-skills`로 직접 업데이트합니다.
+**자동 업데이트를 켜세요.** Claude Code는 Anthropic 밖의 마켓플레이스에 대해 자동 업데이트를 꺼 둡니다. `/plugin`을 실행해 **Marketplaces**에서 `cafe-skills`를 고르고 **Enable auto-update**를 선택하세요. 그러면 세션을 시작하고 얼마 뒤 새 버전을 확인하고, 업데이트는 `/reload-plugins`를 하거나 다음에 실행할 때 적용됩니다. 바로 업데이트하거나 자동 업데이트를 켜기 전에 설치했다면 같은 화면에서 **Update marketplace**를 고르세요. 최신 목록을 받아 `cafe`를 업데이트합니다. 셸에서는 `claude plugin marketplace update cafe-skills`, 이어서 `claude plugin update cafe@cafe-skills`를 실행합니다.
 
 **개별 스킬**로 설치하려면 저장소를 클론한 뒤 사용할 도구를 선택합니다.
 

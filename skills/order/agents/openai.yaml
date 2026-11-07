@@ -1,0 +1,6 @@
+interface:
+  display_name: "Cafe Order"
+  short_description: "Finish tasks with independent review and evidence"
+  default_prompt: "Use $order to finish this task and verify it with independent review rounds."
+policy:
+  allow_implicit_invocation: false

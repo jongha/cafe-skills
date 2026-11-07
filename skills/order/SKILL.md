@@ -1,34 +1,42 @@
 ---
 name: order
-description: "Place an order at Mr. Latte's cafe and get it back finished, end to end. Takes any task, big or small, and never stops to ask. Fixes the recipe (acceptance criteria) first. Each round, fresh cuppers taste the work from a new viewpoint with a new method and actually run it, and the barista fixes defects until a judge script says SERVE. Runs on one AI. Use as /cafe:order <task>."
+description: "Complete a task through fixed acceptance criteria, implementation, and independent review rounds with a scripted verdict. Use when the user requests the order workflow or asks to finish work with repeated independent verification."
 disable-model-invocation: true
 argument-hint: "<what to make, or the branch to finish>"
 ---
 
 # order
 
-Order: $ARGUMENTS
+The order is the user's task accompanying this skill invocation. Read it from the current user message or the host's supplied arguments; no argument substitution is required.
 
 No cup leaves the bar untasted.
 
 Any task fits: a bug fix, a feature, a refactor, tests, docs, or a branch to finish. If the order is empty, finish the current branch. Size the recipe to the order. A small order, one you expect to touch one or two files, gets at most 3 acceptance criteria. A feature gets more.
+
+## Runtime setup
+
+Read [references/runtimes.md](references/runtimes.md) for the current host: Codex, Claude Code, or Grok. Use only tools actually exposed in this session, and the subagent model that reference sets for the host.
+
+Locate this loaded `SKILL.md`. Its parent directory is the skill directory, independent of the project being worked on. In Claude Code it is `${CLAUDE_SKILL_DIR}`. Resolve [scripts/cafe.py](scripts/cafe.py) and [cupping.md](cupping.md) relative to it. In all commands below, `cafe.py` means `python3 "/absolute/path/to/this/skill/scripts/cafe.py"`, run from the target project root. Quote paths, including paths with spaces. Do not assume a provider-specific environment variable exists.
+
+Full verification needs access to the target files, Python 3 and the required check tools, and fresh subagents that can inspect those files without inheriting the conversation. If any of these is unavailable, use the limited workflow in the runtime reference. Never count a self-review as an independent cupper or claim a check ran when it did not.
 
 Reviews keep finding new problems for three reasons. The bar is not fixed. A review picks the few problems that stand out. A fix in one place breaks another. This skill fixes the recipe first, turns finding into filling tables and running things, and lets a script decide when the work ends.
 
 ## House rules
 
 - You are the barista. You brew, call the cuppers, judge defects, and fix them.
-- End only when `cafe.py check` says SERVE or CLOSE. Never declare done yourself.
+- In full verification, end only when `cafe.py check` says SERVE or CLOSE and the first-time customer has checked the result. If required capabilities or permissions are unavailable, report UNVERIFIED with the missing evidence; it is not a judge verdict.
 - Drop any finding without evidence. Evidence is a command and its output, a failing test, or a `file:line` with the acceptance criterion it breaks.
 - Fix only what is in scope. A finding about something under "Not doing", or about code this order does not touch, goes under "Next order" in recipe.md. A P0 in code this order touches is always in scope.
 - Fix the cause, not the single case. Find every place with the same cause, fix them together, and add a regression test.
 - Every cupper is a fresh subagent. Never pass it the conversation or your reasoning.
-- Run every subagent you launch on sonnet (`model: "sonnet"`) to keep time and tokens down. Stay on your own model for judging and fixing. If sonnet is not available, leave the model out.
-- The user handed this off and may be away. Never stop to ask. When a choice is open, pick what a careful engineer would pick and write it under Assumptions.
+- Use the host's native subagent tool, parameters, and subagent model from the runtime reference. Stay on your own model for judging and fixing. Fresh contexts matter; a particular provider does not.
+- The user handed this off and may be away. Resolve ordinary choices yourself and write them under Assumptions. Honor the host's approval and sandbox requirements; an assumption cannot grant permission. Continue independent work while required approval or missing information is pending.
 - Do something irreversible (push, deploy, deleting data, sending messages outside) only when the order asks for it in words, and only after a SERVE. Otherwise list it in the report as left for the user. Leave the work uncommitted unless the order asks for a commit or a push.
 - Talk to the user in their language.
 
-`cafe.py` means `python3 ${CLAUDE_SKILL_DIR}/scripts/cafe.py`. From `check`, exit 1 is a normal verdict other than SERVE, so read the first line. Exit 2 means a bad line in the notes. Fix that line by hand and run it again. The cupping table and the cupper brief are in `${CLAUDE_SKILL_DIR}/cupping.md`.
+From `check`, exit 1 is a normal verdict other than SERVE, so read the first line. Exit 2 means invalid notes or arguments; inspect the error, correct the input without removing genuine findings, and run it again. Missing tools or failed execution are not verdicts.
 
 ## The bar
 
@@ -42,9 +50,9 @@ Everything lives at the project root. `<order>` is a short slug for the task.
   <order>/scratch/R<r>-<n>/  one folder per cupper, for the files it makes to check things
 ```
 
-Add `.cafe/*/` to the file that `git rev-parse --git-path info/exclude` names, so order folders stay out of git. Never stage `.cafe/` unless the order asks.
+When git is available, add `.cafe/*/` once to the file that `git rev-parse --git-path info/exclude` names, if permitted, so order folders stay out of git. If it is not writable, record that and keep the folders unstaged. Never stage `.cafe/` unless the order asks.
 
-Before you make a folder, read each `.cafe/*/recipe.md`. If one has this order's goal, continue it. If its cupping.tsv has rounds, run `cafe.py check` and follow the verdict. Otherwise start at Brew.
+Before you make a folder, read each `.cafe/*/recipe.md`. If one has this order's goal, continue it. Recheck the current files and acceptance checks before relying on an earlier verdict, especially after switching hosts. If the reviewed result has changed, run fresh rounds; old evidence cannot certify new changes. If its cupping.tsv has rounds, run `cafe.py check` and follow the verdict. Otherwise start at Brew.
 
 ## 1. Recipe
 
@@ -86,8 +94,8 @@ For each round R, starting at 1:
 
 1. Save `git status --short` and `git diff` to `.cafe/<order>/scratch/R<R>-before.txt`. Without git, save a list of files with their modification times.
 2. Take round R's three cuppers from the cupping table. Each brief is the cupper brief with only the `<>` filled in. Add nothing else. The scope must include uncommitted changes.
-3. Launch all three cuppers in one message (`subagent_type: "general-purpose"`, `model: "sonnet"`).
-4. Compare the project with the saved state. If a cupper changed it, undo that change and keep yours.
+3. Launch three fresh cuppers using the current host's subagent tool. Run them in parallel if capacity permits; otherwise run them sequentially in separate fresh contexts. Wait for every report before recording or judging the round. Only the barista writes cupping.tsv.
+4. Compare the project with the saved state. Restore only changes attributable to a cupper; preserve pre-existing and concurrent user changes. Never reset the whole working tree.
 5. For each cupper, run `cafe.py add <notes> R cup -t yes|no "<viewpoint> x <method>"`. `yes` means that cupper ran something: a check, the code, a command, or the examples in a doc.
 6. Reproduce every finding yourself and judge it. Keep it as `defect -s P0|P1|P2` or drop it as `drop`, with the reason in the note.
    - P0: data loss, security, crash
@@ -117,6 +125,8 @@ For each round R, starting at 1:
    ## Order up: <the goal in your own words>
 
    **SERVE** · <rounds> rounds · <cup rows> cuppers · notes in `.cafe/<order>/`
+
+   Runtime: <host> · Verification: full
 
    Cupping: <each round line from the last cafe.py check, such as R1 2 P0/P1 defects · R2 clean · R3 clean>
 

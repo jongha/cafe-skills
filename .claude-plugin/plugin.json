@@ -1,0 +1,13 @@
+{
+  "name": "cafe",
+  "version": "0.1.0",
+  "description": "Mr. Latte's cafe for Claude Code. latte finishes what you order end to end: a fixed recipe, fresh cuppers every round, and a judge script that decides when it is ready to serve.",
+  "author": {
+    "name": "Mr. Latte",
+    "url": "https://www.mrlatte.net"
+  },
+  "homepage": "https://github.com/jongha/cafe-skills",
+  "repository": "https://github.com/jongha/cafe-skills",
+  "license": "MIT",
+  "keywords": ["mrlatte", "cafe", "latte", "review", "verification", "convergence", "workflow"]
+}

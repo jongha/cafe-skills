@@ -1,0 +1,15 @@
+{
+  "name": "cafe-skills",
+  "description": "Mr. Latte's cafe for Claude Code.",
+  "owner": {
+    "name": "Mr. Latte",
+    "url": "https://www.mrlatte.net"
+  },
+  "plugins": [
+    {
+      "name": "cafe",
+      "source": "./",
+      "description": "Mr. Latte's cafe for Claude Code. latte finishes what you order end to end."
+    }
+  ]
+}

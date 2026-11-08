@@ -2,13 +2,15 @@
 """The cafe's cupping notes and verdict, used by the order skill.
 
   cafe.py add <notes> <round> <event> [-s P0|P1|P2] [-t yes|no] <note>
+  cafe.py add-rows <notes>   rows on stdin, one per line, each written as add's arguments after <notes>.
+                             All rows are written or none, so a fixed batch can be rerun as a whole.
   cafe.py check <notes> [--max-rounds N]
   cafe.py self-test
 
 events
   size    the size of the order: S, M, or L as the note. It sets the cuppers per round,
           the clean rounds needed, and the round limit. It can go up later, never down.
-          Notes without a size row are judged as L.
+          Notes without a size row are judged as L, and check says so.
   cup     one cupper finished. -t yes means that cupper actually ran something (tasted it).
   defect  a finding kept on evidence. -s gives its severity.
   drop    a finding dropped (no evidence, outside the recipe, taste, duplicate).
@@ -31,6 +33,7 @@ Exit code: 0 for SERVE, 1 for any other verdict, 2 for a bad notes file.
 """
 import argparse
 import os
+import shlex
 import sys
 import tempfile
 
@@ -102,20 +105,65 @@ def read_notes(path):
     return rows
 
 
-def add(path, rnd, event, severity, tasted, note):
+def make_row(rnd, event, severity, tasted, note):
     note = " ".join(note.split())
     if event == "size":
         note = note.upper()
     if not note:
         raise NotesError("note is empty. Say in one line what happened")
     validate(rnd, event, severity, tasted, note)
-    read_notes(path)
+    return (rnd, event, severity, tasted, note)
+
+
+def append(path, rows):
+    last = max((r for r, e, *_ in read_notes(path) if e in ROUND_EVENTS), default=0)
+    for rnd, event, *_ in rows:
+        if rnd > last + 1:
+            raise NotesError(f"round {rnd} skips rounds: the last cupping round is {last}")
+        if event in ROUND_EVENTS:
+            last = max(last, rnd)
     new = not os.path.exists(path) or os.path.getsize(path) == 0
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    text = "".join("\t".join(str(c) for c in row) + "\n" for row in rows)
     with open(path, "a", encoding="utf-8") as f:
-        if new:
-            f.write("\t".join(HEADER) + "\n")
-        f.write("\t".join([str(rnd), event, severity, tasted, note]) + "\n")
+        f.write(("\t".join(HEADER) + "\n" if new else "") + text)
+
+
+def add(path, rnd, event, severity, tasted, note):
+    append(path, [make_row(rnd, event, severity, tasted, note)])
+
+
+class RowParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise NotesError(message)
+
+
+def row_args(p):
+    p.add_argument("round", type=int)
+    p.add_argument("event", choices=EVENTS)
+    p.add_argument("note")
+    p.add_argument("-s", "--severity", default="-")
+    p.add_argument("-t", "--tasted", default="-")
+
+
+def add_rows(path, lines):
+    parser = RowParser(prog="row", add_help=False)
+    row_args(parser)
+    rows = []
+    for n, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            a = parser.parse_args(shlex.split(line))
+            rows.append(make_row(a.round, a.event, a.severity, a.tasted, a.note))
+        except (NotesError, ValueError) as e:
+            raise NotesError(f"row {n} ({line.strip()}): {e}. Nothing was written")
+    if not rows:
+        raise NotesError("no rows on stdin. Write one row per line")
+    try:
+        append(path, rows)
+    except NotesError as e:
+        raise NotesError(f"{e}. Nothing was written")
 
 
 def order_size(rows):
@@ -125,19 +173,22 @@ def order_size(rows):
     return max(sizes, key=SIZE_ORDER.index)
 
 
-def judge(rows, max_rounds=None):
+def judge(rows, max_rounds=None, notes="<notes>"):
     size = order_size(rows)
     rule = SIZES[size]
     min_cuppers = rule["cuppers"]
     clean_streak = rule["streak"]
     if max_rounds is None:
         max_rounds = rule["max_rounds"]
-    head = (f"size {size}: {min_cuppers} cupper(s) a round, {clean_streak} clean round(s) in a row to serve, "
-            f"{max_rounds} round limit")
+    head = [f"size {size}: {min_cuppers} cupper(s) a round, {clean_streak} clean round(s) in a row to serve, "
+            f"{max_rounds} round limit"]
+    if not any(e == "size" for _, e, *_ in rows):
+        head.append(f"no size row in {notes}, so judged as L. Log the size the recipe picked: "
+                    f"cafe.py add {shlex.quote(notes)} 0 size S|M|L")
 
     rounds = sorted({r for r, e, *_ in rows if e in ROUND_EVENTS})
     if not rounds:
-        return "RECUP", [head, "no cupping rounds yet", f"next: round 1 with {min_cuppers} cupper(s)"]
+        return "RECUP", head + ["no cupping rounds yet", f"next: round 1 with {min_cuppers} cupper(s)"]
     last = rounds[-1]
     missing = [r for r in range(1, last + 1) if r not in rounds]
     if missing:
@@ -170,7 +221,7 @@ def judge(rows, max_rounds=None):
             out.append(f"before the round {last_recipe} recipe change")
         return out
 
-    reasons = [head]
+    reasons = list(head)
     for r in rounds:
         p = problems(r)
         reasons.append(f"R{r}: " + ("clean" if not p else ", ".join(p)))
@@ -250,6 +301,13 @@ def self_test():
         failed += not ok
         print(f"{'ok  ' if ok else 'FAIL'} {name}: {got}" + ("" if ok else f" (expected {want})"))
 
+    def warned(rows):
+        return any("no size row" in line for line in judge(rows)[1])
+
+    ok = warned(notes()) and warned(notes(*clean(1))) and not warned(notes(size("L"), *clean(1)))
+    failed += not ok
+    print(f"{'ok  ' if ok else 'FAIL'} check says when there is no size row")
+
     got, _ = judge(notes(size("S"), *dirty(1, 1, n=1), *dirty(2, 1, n=1)), max_rounds=2)
     ok = got == "CLOSE"
     failed += not ok
@@ -287,6 +345,26 @@ def self_test():
               and judge(rows)[0] == "RECUP" and order_size(rows) == "M")
         failed += not ok
         print(f"{'ok  ' if ok else 'FAIL'} write with add and read back")
+        expect_error("a round that skips rounds", lambda: add(path, 3, "cup", "-", "yes", "typo"))
+        skip = os.path.join(d, "skip.tsv")
+        add(skip, 1, "cup", "-", "yes", "a x b")
+        add(skip, 2, "recipe", "-", "-", "a recipe row may sit one round ahead")
+        expect_error("a recipe row does not open a round to skip into", lambda: add(skip, 3, "cup", "-", "yes", "typo"))
+
+        batch = ["2 cup -t yes 'Customer x Order sheet'", "", '2 defect -s P1 "it\'s empty"', "2 drop 'no evidence'"]
+        before = open(path, encoding="utf-8").read()
+        expect_error("a bad row in a batch", lambda: add_rows(path, batch[:2] + ["2 defect 'no severity'"] + batch[3:]))
+        expect_error("an unclosed quote in a batch", lambda: add_rows(path, batch[:1] + ["2 drop 'open"]))
+        expect_error("an empty batch", lambda: add_rows(path, ["", "  "]))
+        ok = open(path, encoding="utf-8").read() == before
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} a rejected batch writes nothing")
+        add_rows(path, batch)
+        rows = read_notes(path)
+        ok = len(rows) == 9 and rows[-2] == (2, "defect", "P1", "-", "it's empty") and judge(rows)[0] == "RECUP"
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} a fixed batch writes every row once")
+
         with open(path, "a", encoding="utf-8") as f:
             f.write("2 cup - yes a row split by spaces\n")
         expect_error("row not split by tabs", lambda: read_notes(path))
@@ -300,11 +378,9 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
     a = sub.add_parser("add", help="add one row to the cupping notes")
     a.add_argument("notes")
-    a.add_argument("round", type=int)
-    a.add_argument("event", choices=EVENTS)
-    a.add_argument("note")
-    a.add_argument("-s", "--severity", default="-")
-    a.add_argument("-t", "--tasted", default="-")
+    row_args(a)
+    b = sub.add_parser("add-rows", help="add rows from stdin, one per line as add's arguments; all or none")
+    b.add_argument("notes")
     c = sub.add_parser("check", help="decide whether it is ready to serve")
     c.add_argument("notes")
     c.add_argument("--max-rounds", type=int, default=None, help="override the size's round limit")
@@ -315,8 +391,11 @@ def main():
         if args.cmd == "add":
             add(args.notes, args.round, args.event, args.severity, args.tasted, args.note)
             return 0
+        if args.cmd == "add-rows":
+            add_rows(args.notes, sys.stdin.read().splitlines())
+            return 0
         if args.cmd == "check":
-            verdict, reasons = judge(read_notes(args.notes), args.max_rounds)
+            verdict, reasons = judge(read_notes(args.notes), args.max_rounds, args.notes)
             print(verdict)
             for line in reasons:
                 print(f"  {line}")

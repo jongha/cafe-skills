@@ -40,7 +40,7 @@ Follow the project's own instructions (CLAUDE.md, AGENTS.md) about what may run 
 If your method is bad shot, first copy the project to <scratch path>/copy without .git, .cafe, and dependency or build folders, link the dependency folders back if the checks need them, and break lines only there.
 
 - Recipe: <recipe.md path> (for blind tasting, read it only after your spec is written)
-- Scope: <files, directories, or `git diff <base>`, which includes uncommitted changes>
+- Scope: <files or directories, or `git diff <base>` plus the new files this order created (git diff leaves out untracked files)>
 - House notes: <house-notes.md path> (skip if missing)
 - Size: <S, M, or L>
 - Budget: about <15, 25, or 40> tool calls. When you reach it, stop and report what you have.

@@ -7,36 +7,27 @@ argument-hint: "<what to make, or the branch to finish>"
 
 # order
 
-The order is the user's task accompanying this skill invocation. Read it from the current user message or the host's supplied arguments; no argument substitution is required.
-
 No cup leaves the bar untasted.
 
-Any task fits: a bug fix, a feature, a refactor, tests, docs, or a branch to finish. If the order is empty, finish the current branch.
+The order is the user's task from the message or host arguments that came with this skill: a bug fix, a feature, a refactor, tests, docs, or a branch to finish. If the order is empty, finish the current branch.
+
+Reviews never end when the bar moves, each review picks only what stands out, and each fix breaks something else. So the recipe is fixed first, cuppers fill tables and run things, and a script decides when the work ends.
 
 ## Runtime setup
 
-Read [references/runtimes.md](references/runtimes.md) for the current host: Codex, Claude Code, or Grok. Use only tools actually exposed in this session, and the subagent model that reference sets for the host.
+Read [references/runtimes.md](references/runtimes.md) for the current host (Codex, Claude Code, or Grok) and use only tools this session exposes.
 
-Locate this loaded `SKILL.md`. Its parent directory is the skill directory, independent of the project being worked on. In Claude Code it is `${CLAUDE_SKILL_DIR}`. Resolve [scripts/cafe.py](scripts/cafe.py) and [cupping.md](cupping.md) relative to it. In all commands below, `cafe.py` means `python3 "/absolute/path/to/this/skill/scripts/cafe.py"`, run from the target project root. Quote paths, including paths with spaces. Do not assume a provider-specific environment variable exists.
+The skill directory is the folder holding this `SKILL.md`, not the project. In Claude Code it is `${CLAUDE_SKILL_DIR}`; elsewhere, do not assume a provider-specific environment variable exists. Resolve [cupping.md](cupping.md) and [scripts/cafe.py](scripts/cafe.py) from it. Below, `cafe.py` means `python3 "<skill directory>/scripts/cafe.py"` with the absolute path, run from the project root. Quote paths, including paths with spaces.
 
-Full verification needs access to the target files, Python 3 and the required check tools, and fresh subagents that can inspect those files without inheriting the conversation. If any of these is unavailable, use the limited workflow in the runtime reference. Never count a self-review as an independent cupper or claim a check ran when it did not.
-
-Reviews keep finding new problems for three reasons. The bar is not fixed. A review picks the few problems that stand out. A fix in one place breaks another. This skill fixes the recipe first, turns finding into filling tables and running things, and lets a script decide when the work ends.
-
-The tasting is sized to the order. A one-line fix does not get five rounds of three cuppers. Pick the size first and let it set the work.
+Full verification needs the project files, Python 3 and the project's check tools, fresh subagents that do not inherit the conversation, and permission to use them. If any is missing, follow Limited verification in the runtime reference and hand over UNVERIFIED, which is not a judge verdict. A self-review never counts as a cupper, and a check that did not run is never reported as run.
 
 ## Size
 
-Pick the size from the change you expect. Risk areas are stored data and migrations, auth and permissions, money, deleting user data, and concurrency.
-
-- **S**: at most two files and about 60 changed lines, in no risk area. Most bug fixes and doc edits.
-- **M**: at most about six files and 300 lines, or an S-sized change in a risk area.
-- **L**: anything bigger, or an M-sized change in a risk area.
-
-To finish a branch, size it by the branch's diff against its base.
+The tasting is sized to the order: a one-line fix does not get five rounds of three cuppers. Size by the change you expect, or a branch by its diff against its base. A change in a risk area (stored data and migrations, auth and permissions, money, deleting user data, concurrency) moves up one size.
 
 | | S | M | L |
 |---|---|---|---|
+| The change | at most 2 files, about 60 changed lines | at most about 6 files, 300 lines | bigger |
 | Acceptance criteria | at most 3 | at most 6 | as many as the goal needs |
 | Claim rehearsal | you, 3 reasons | a subagent, 5 reasons | a subagent, 10 reasons |
 | Cuppers a round | 1 | 2 | 3 |
@@ -45,45 +36,42 @@ To finish a branch, size it by the branch's diff against its base.
 | Round limit | 3 | 4 | 5 |
 | Serve | you rerun every check | you rerun every check | a first-time customer, once |
 
-Log the size before round 1 with `cafe.py add <notes> 0 size S|M|L`. The judge reads the cuppers, the clean rounds, and the round limit from it. If the change grows past its size while you brew or fix, raise it with `cafe.py add <notes> <round> size M|L`. The judge never lowers a size. An order from before sizes has no size row and is judged as L. Add one before its next round.
+Log the size before round 1: `cafe.py add <notes> 0 size S|M|L`. If the change outgrows it, raise it with `cafe.py add <notes> <round> size M|L`; the judge never lowers a size. Notes with no size row are judged as L, and `check` says so.
 
 ## House rules
 
-- You are the barista. You brew, call the cuppers, judge defects, and fix them.
-- In full verification, end only when `cafe.py check` says SERVE or CLOSE and the serve check is done. If required capabilities or permissions are unavailable, report UNVERIFIED with the missing evidence; it is not a judge verdict.
-- Drop any finding without evidence. Evidence is a command and its output, a failing test, or a `file:line` with the acceptance criterion it breaks.
+- You are the barista: you brew, call the cuppers, judge defects, and fix them.
+- In full verification, end only when `cafe.py check` says SERVE or CLOSE and the serve check is done.
+- Drop any finding without evidence: a command and its output, a failing test, or a `file:line` with the acceptance criterion it breaks.
 - Fix only what is in scope. A finding about something under "Not doing", or about code this order does not touch, goes under "Next order" in recipe.md. A P0 in code this order touches is always in scope.
-- Fix the cause, not the single case. Find every place in the code this order touches with the same cause, fix them together, and add a regression test.
-- Every cupper is a fresh subagent. Never pass it the conversation or your reasoning.
-- Use the host's native subagent tool, parameters, and subagent model from the runtime reference. Stay on your own model for judging and fixing. Fresh contexts matter; a particular provider does not.
-- The project's own instructions win. If its CLAUDE.md or AGENTS.md limits subagents (one at a time, no model override) or forbids running builds or tests locally, follow it: run cuppers one after another, leave the model out, and use the checks the project allows. Write that under Assumptions.
+- Fix the cause, not the single case: fix every place with the same cause in the code this order touches, and add a regression test.
+- Every cupper is a fresh subagent. Never pass it the conversation or your reasoning. Launch it as the runtime reference says for your host; judge and fix on your own model.
+- The project's own instructions win. If its CLAUDE.md or AGENTS.md limits subagents (one at a time, no model override) or forbids local builds or tests, run cuppers one after another, leave the model out, use the checks it allows, and write that under Assumptions.
 - Run the narrowest check that proves the point: one test file, one command, one grep. Run the whole suite once, before you serve, and only if the project allows it.
-- The user handed this off and may be away. Resolve ordinary choices yourself and write them under Assumptions. Honor the host's approval and sandbox requirements; an assumption cannot grant permission. Continue independent work while required approval or missing information is pending.
-- Do something irreversible (push, deploy, deleting data, sending messages outside) only when the order asks for it in words, and only after a SERVE. Otherwise list it in the report as left for the user. Leave the work uncommitted unless the order asks for a commit or a push.
+- The user may be away. Resolve ordinary choices yourself and write them under Assumptions. Honor the host's approval and sandbox rules; an assumption cannot grant permission. Keep doing independent work while an approval or missing information is pending.
+- Do something irreversible (push, deploy, deleting data, sending messages outside) only when the order asks for it in words, and only after a SERVE. Otherwise list it as left for the user, and leave the work uncommitted unless the order asks for a commit or a push.
 - Talk to the user in their language.
 
-From `check`, exit 1 is a normal verdict other than SERVE, so read the first line. Exit 2 means invalid notes or arguments; inspect the error, correct the input without removing genuine findings, and run it again. Missing tools or failed execution are not verdicts.
+`cafe.py check` exits 0 on SERVE and exit 1 on any other verdict; read its first line. Exit 2 means invalid notes or arguments: fix the input, keeping genuine findings, and rerun. A missing tool or a failed run is not a verdict.
 
 ## Keep the customer posted
 
-The user should see where the order is without reading your work. At each moment listed below, print one line in this shape, with the stage name and the rest in the user's language. One line per moment, and no reasoning.
+At each moment below, print one line like these, in the user's language, with no reasoning:
 
 ```
 [cafe 1/4 Recipe] size S, 2 criteria: last page shows, page count right for 0 and 41
 [cafe 2/4 Brew] checks built, 2 of 2 fail as expected
-[cafe 2/4 Brew] unit 1 of 2 done, checks 1 of 2 pass
 [cafe 3/4 Cupping R1] 1 cupper tasting: Customer x Order sheet. This takes a few minutes
 [cafe 3/4 Cupping R1] 1 P1, 2 P2 -> RECUP, fixing the P1: page 3 empty when the total is a full page
-[cafe 3/4 Cupping R2] clean -> SERVE
 [cafe 4/4 Serve] rerunning 2 checks and the test suite
 ```
 
 - Recipe: once, after the recipe is written: the size and each criterion in a few words.
 - Brew: after the checks are built, and after each unit.
-- Cupping: before you launch a round, naming each cupper's viewpoint and method. When cuppers run one after another, one line before each. After `cafe.py check`, the counts, the verdict, and what you fix next.
+- Cupping: before each round, or before each cupper when they run one after another, naming its viewpoint and method. After `cafe.py check`, the counts, the verdict, and what you fix next.
 - Serve: before the final check. Then the receipt.
 
-If the host has a task list or plan tool (TodoWrite or TaskCreate in Claude Code, `update_plan` in Codex), mirror the order there too: one item per stage, and one item per cupping round once you start it. Mark each one in progress and done as you go. Keep the list to these items.
+If the host has a task list or plan tool (TodoWrite or TaskCreate in Claude Code, `update_plan` in Codex), mirror only the four stages and one item per cupping round once it starts, marking each as you go.
 
 ## The bar
 
@@ -93,18 +81,18 @@ Everything lives at the project root. `<order>` is a short slug for the task.
 .cafe/
   house-notes.md             kinds of defects earlier rounds missed. Kept after the order is done
   <order>/recipe.md          the recipe
-  <order>/cupping.tsv        cupping notes. Write only with cafe.py add
+  <order>/cupping.tsv        cupping notes. Write only with cafe.py add or add-rows
   <order>/scratch/R<r>-<n>/  one folder per cupper, for the files it makes to check things
 ```
 
-When git is available, add `.cafe/*/` once to the file that `git rev-parse --git-path info/exclude` names, if permitted, so order folders stay out of git. If it is not writable, record that and keep the folders unstaged. Never stage `.cafe/` unless the order asks.
+With git, add `.cafe/*/` once to the file `git rev-parse --git-path info/exclude` names, if permitted; otherwise record that and keep the folders unstaged. Never stage `.cafe/` unless the order asks.
 
-Before you make a folder, read each `.cafe/*/recipe.md`. If one has this order's goal, continue it. Recheck the current files and acceptance checks before relying on an earlier verdict, especially after switching hosts. If the reviewed result has changed, run fresh rounds; old evidence cannot certify new changes. If its cupping.tsv has rounds, run `cafe.py check` and follow the verdict. Otherwise start at Brew.
+Before you make a folder, read each `.cafe/*/recipe.md`. If one has this order's goal, continue it, but recheck the current files and acceptance checks first: old evidence cannot certify new changes, so run fresh rounds if the reviewed result changed. If its cupping.tsv has rounds, run `cafe.py check` and follow the verdict; otherwise start at Brew.
 
 ## 1. Recipe
 
-1. Restate the order in your own words: the goal, the problem it solves, and the smallest change you expect. When the order leaves a choice open, pick the reasonable option and write it under Assumptions, with the option you did not pick. Pick the size and log it.
-2. Write `.cafe/<order>/recipe.md`. Keep the acceptance criteria within the size's limit.
+1. Restate the order in your own words: the goal, the problem it solves, and the smallest change you expect. Where the order leaves a choice open, pick the reasonable option and write it under Assumptions with the option you did not pick. Pick the size and log it.
+2. Write `.cafe/<order>/recipe.md`, with acceptance criteria within the size's limit.
 
    ```markdown
    # <order>
@@ -124,28 +112,28 @@ Before you make a folder, read each `.cafe/*/recipe.md`. If one has this order's
    - <ideas from cupping that are outside the recipe>
    ```
 
-3. Claim rehearsal. Ask: "This cup went out and a customer complained. Write the possible reasons." For S, write 3 reasons yourself. For M and L, give a fresh subagent only the goal and the draft recipe, and ask for 5 or 10. Add a reason to the acceptance criteria only if it would break the goal in real use. Put the rest under Assumptions or Next order.
-4. The recipe is now fixed. Only a change to the acceptance criteria or to "Not doing" is a recipe change. Adding an assumption or a next order is not. For a recipe change, run `cafe.py add <notes> <round> recipe "<what and why>"`, where `<round>` is the last round judged, or 0 before round 1. The judge stops counting clean rounds up to that round, so a late change can end in CLOSE.
+3. Claim rehearsal, as many reasons and by whom the size table says: "This cup went out and a customer complained. Write the possible reasons." A fresh subagent gets only the goal and the draft recipe. Add a reason to the acceptance criteria only if it would break the goal in real use; put the rest under Assumptions or Next order.
+4. The recipe is now fixed. Only a change to the acceptance criteria or to "Not doing" is a recipe change; adding an assumption or a next order is not. Log one with `cafe.py add <notes> <round> recipe "<what and why>"`, where `<round>` is the last round judged, or 0 before round 1. Clean rounds up to that round stop counting, so a late change can end in CLOSE.
 
-If the order is to finish existing code, read the goal from the branch, the commits, and the PR description. Write the recipe and run the claim rehearsal. Then build the checks that are missing (Brew step 1), make them pass, and go to cupping.
+To finish existing code, read the goal from the branch, its commits, and the PR description; Brew then only builds the missing checks and makes them pass.
 
 ## 2. Brew
 
-1. Build the check for each acceptance criterion first. Use an existing test, a command, or a grep when one proves it. Write a new test or a short script only when nothing existing does. A subagent is never a check: for a criterion nothing can run, such as the wording of a doc, the check names what to read (`file:line` or a grep), and the cuppers read it. If a check cannot run here, for example because it needs a service or credentials you do not have, or the project forbids it, use the nearest check that can run and write the gap under Assumptions.
-2. Run the checks now. A check for new or changed behavior must fail. A check that guards existing behavior may pass.
-3. Build in small units. Run the checks after each unit and move on only when they pass. If a check still fails after three different approaches, go to cupping anyway and log it as `defect -s P1` in round 1. The round limit now bounds the work.
-4. When every check passes, go to cupping.
+1. Build the check for each acceptance criterion first: an existing test, command, or grep when one proves it, and a new test or short script only when none does. A subagent is never a check. For a criterion nothing can run, such as a doc's wording, the check names what to read (`file:line` or a grep), and the cuppers read it. If a check cannot run here (it needs a service or credentials you lack, or the project forbids it), use the nearest one that can and write the gap under Assumptions.
+2. Run the checks now. A check for new or changed behavior must fail; a check that guards existing behavior may pass.
+3. Build in small units, running the checks after each and moving on only when they pass. When every check passes, go to cupping. If a check still fails after three different approaches, go to cupping anyway and log it as `defect -s P1` in round 1; the round limit now bounds the work.
 
 ## 3. Cupping
 
 For each round R, starting at 1:
 
-1. Save `git status --short` and `git diff` to `.cafe/<order>/scratch/R<R>-before.txt`. Without git, save a list of files with their modification times.
-2. Take round R's row from the cupping table and use its first cuppers: one for S, two for M, all three for L. Each brief is the cupper brief with only the `<>` filled in. Add nothing else. The scope must include uncommitted changes.
-3. Launch the round's cuppers using the current host's subagent tool. Run them in parallel if capacity and the project's instructions permit; otherwise run them sequentially in separate fresh contexts. Wait for every report before recording or judging the round. Only the barista writes cupping.tsv.
-4. Compare the project with the saved state. Restore only changes attributable to a cupper; preserve pre-existing and concurrent user changes. Never reset the whole working tree.
-5. For each cupper, run `cafe.py add <notes> R cup -t yes|no "<viewpoint> x <method>"`. `yes` means that cupper ran something: a check, the code, a command, or the examples in a doc.
-6. Judge each finding. Keep it as `defect -s P0|P1|P2` or drop it as `drop`, with the reason in the note. Reproduce a finding yourself only when you would keep it as P0 or P1. Log the cupper's Minor list as P2 or drop without reproducing it. Log findings with one cause as one defect.
+1. Save `git status --short` and `git diff` to `.cafe/<order>/scratch/R<R>-before.txt`, or without git, a list of files with their modification times.
+2. Take round R's row from the cupping table and as many of its cuppers as the size needs. Each brief is the cupper brief with only the `<>` filled in and nothing added. The scope must include uncommitted changes and the new files this order created; `git diff` alone leaves out untracked files.
+3. Launch the cuppers with the host's subagent tool, in parallel if capacity and the project's instructions permit, otherwise one after another in separate fresh contexts. Wait for every report before you record or judge the round. Only the barista writes cupping.tsv.
+4. Compare the project with the saved state. Restore only changes a cupper made; keep pre-existing and concurrent user changes. Never reset the whole working tree.
+5. Write one row per cupper: `R cup -t yes|no "<viewpoint> x <method>"`. `yes` means that cupper ran something: a check, the code, a command, or a doc's examples.
+6. Judge each finding: keep it as `R defect -s P0|P1|P2 "<note>"` or drop it as `R drop "<reason>"`. Reproduce a finding yourself only when you would keep it as P0 or P1. Log the cupper's Minor list as P2 or drop without reproducing it. Findings with one cause are one defect.
+
    - P0: data loss, security, crash
    - P1: breaks an acceptance criterion
    - P2: any other flaw whose cost you can name
@@ -153,6 +141,16 @@ For each round R, starting at 1:
    - Naming, style, and taste are not defects
    - A flaw in a check you built counts only when it hides a real failure of this order. Otherwise it is a drop
    - A gap or a conflict in the recipe that matters in real use: fix the recipe and log `recipe`. Anything else is a next order
+
+   Then log steps 5 and 6 in one call. A bad row writes nothing; fix it and rerun the whole command.
+
+   ```
+   cafe.py add-rows <notes> <<'ROWS'
+   1 cup -t yes "Customer x Order sheet"
+   1 defect -s P1 "page 3 empty when the total is a full page"
+   ROWS
+   ```
+
 7. If an earlier round missed this defect, add a line to the house notes: `- <what was missed>. Look for: <what would have caught it>`
 8. Run `cafe.py check .cafe/<order>/cupping.tsv` before you fix anything, and follow the verdict. No cupper would taste a fix made after the last round.
 
@@ -167,10 +165,10 @@ For each round R, starting at 1:
 
 1. Check the finished work.
    - S and M: rerun every acceptance check yourself, and the whole suite once if the project allows it. Keep each command and its output for the receipt.
-   - L: serve a first-time customer, once per order. Give a fresh subagent that never saw the work only recipe.md, the result, and cupping.tsv. It checks each acceptance criterion on the real thing and reports PASS or FAIL with evidence. It also rechecks every `drop` and P2 row and says which ones really are P0 or P1 in real use. If it reopens the order, the next SERVE goes straight to the receipt, because the new rounds' cuppers tasted the fix.
+   - L: once per order, a first-time customer: a fresh subagent that never saw the work gets only recipe.md, the result, and cupping.tsv. It checks each acceptance criterion on the real thing, reporting PASS or FAIL with evidence, and rechecks every `drop` and P2 row for any that really are P0 or P1 in real use. If it reopens the order, the next SERVE goes straight to the receipt, because the new rounds' cuppers tasted the fix.
 2. If anything fails or turns out to be P0 or P1, reproduce it, log it as `defect -s P0|P1` under the last round, add a house note, run `cafe.py check`, and follow the verdict.
 3. On SERVE, do the irreversible steps the order asked for, such as a commit and a push. After CLOSE, leave them for the user.
-4. Hand over the receipt. Fill in this template, with the labels in the user's language. Write "none" for an empty item.
+4. Hand over the receipt: this template with the labels in the user's language, and "none" for an empty item.
 
    ```markdown
    ## Order up: <the goal in your own words>

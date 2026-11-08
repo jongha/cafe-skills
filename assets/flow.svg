@@ -48,15 +48,15 @@
   <rect x="582" y="100" width="160" height="100" rx="12" fill="#FFF8EF" stroke="#C08552" stroke-width="1.5"/>
   <circle cx="604" cy="122" r="11" fill="#6F4E37"/><text x="604" y="126.5" class="num" text-anchor="middle">3</text>
   <text x="622" y="127" class="title">Cupping</text>
-  <text x="598" y="155" class="line">3 fresh cuppers</text>
+  <text x="598" y="155" class="line">1 to 3 fresh cuppers</text>
   <text x="598" y="175" class="line">viewpoint × method</text>
 
   <!-- serve -->
   <rect x="764" y="100" width="160" height="100" rx="12" fill="#F0F7F2" stroke="#2E7D4F" stroke-width="1.5"/>
   <circle cx="786" cy="122" r="11" fill="#2E7D4F"/><text x="786" y="126.5" class="num" text-anchor="middle">4</text>
   <text x="804" y="127" class="title">Serve</text>
-  <text x="780" y="155" class="line">first-time customer</text>
-  <text x="780" y="175" class="line">checks the real thing</text>
+  <text x="780" y="155" class="line">every check again</text>
+  <text x="780" y="175" class="line">on the finished work</text>
 
   <!-- forward arrows -->
   <path d="M199 150H214" stroke="#8C7462" stroke-width="2" marker-end="url(#a-brown)"/>
@@ -82,13 +82,13 @@
 
   <rect x="36" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
   <rect x="50" y="324" width="62" height="22" rx="11" fill="#2E7D4F"/><text x="81" y="339" class="chip" text-anchor="middle">SERVE</text>
-  <text x="50" y="364" class="card">Two clean rounds in a row:</text>
-  <text x="50" y="380" class="card">no P0/P1, 3+ cuppers,</text>
+  <text x="50" y="364" class="card">A clean round, two for L:</text>
+  <text x="50" y="380" class="card">no P0/P1, a full crew,</text>
   <text x="50" y="396" class="card">at least one actually ran it.</text>
 
   <rect x="262" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
   <rect x="276" y="324" width="62" height="22" rx="11" fill="#B7791F"/><text x="307" y="339" class="chip" text-anchor="middle">RECUP</text>
-  <text x="276" y="364" class="card">Fix every defect at its cause,</text>
+  <text x="276" y="364" class="card">Fix P0/P1 at the cause,</text>
   <text x="276" y="380" class="card">add a regression test,</text>
   <text x="276" y="396" class="card">taste it again next round.</text>
 
@@ -100,7 +100,7 @@
 
   <rect x="714" y="310" width="210" height="96" rx="10" fill="#FFFFFF" stroke="#E2D5C5"/>
   <rect x="728" y="324" width="62" height="22" rx="11" fill="#7B808A"/><text x="759" y="339" class="chip" text-anchor="middle">CLOSE</text>
-  <text x="728" y="364" class="card">Five rounds, no SERVE.</text>
+  <text x="728" y="364" class="card">Round limit, no SERVE.</text>
   <text x="728" y="380" class="card">Report it did not converge.</text>
   <text x="728" y="396" class="card">The bar is never lowered.</text>
 </svg>

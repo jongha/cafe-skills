@@ -20,7 +20,7 @@ The workflow and judge are shared. The host supplies file access, command execut
 - Use `/order <task>` or `/skills order`. Natural-language invocation such as “Use the order skill to fix …” also supplies the task explicitly.
 - Grok also loads Claude Code skills and installed Claude plugins. When two skills share a name, Grok keeps the one from the higher-priority location.
 - Use the native subagent tool (`task`). Start child sessions without inherited conversation history. Use only its documented parameters and the configured model; neither Codex nor Claude parameter names are portable.
-- If subagents are disabled or a fresh context cannot be selected, use limited verification. Do not silently change global settings or claim three isolated reviewers ran.
+- If subagents are disabled or a fresh context cannot be selected, use limited verification. Do not silently change global settings or claim isolated reviewers ran.
 
 ## Limited verification
 

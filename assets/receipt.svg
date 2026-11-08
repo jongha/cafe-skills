@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="790" viewBox="0 0 960 790" role="img" aria-labelledby="t d">
   <title id="t">What comes back</title>
-  <desc id="d">A finished order, drawn as a cafe receipt: the order, the SERVE verdict after 4 rounds, the cupping rounds, each acceptance criterion with the command that proves it, what changed, what is left for you, and what it assumed, left, and learned.</desc>
+  <desc id="d">A finished order, drawn as a cafe receipt: the order, the SERVE verdict for a size M order after 3 rounds, the cupping rounds, each acceptance criterion with the command that proves it, what changed, what is left for you, and what it assumed, left, and learned.</desc>
   <style>
     text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5B4636; }
     .h1 { font-size: 20px; font-weight: 700; fill: #3B2A20; }
@@ -35,7 +35,7 @@
   <text x="60" y="216" class="label">VERDICT</text>
   <rect x="164" y="201" width="62" height="22" rx="11" fill="#2E7D4F"/>
   <text x="195" y="216" class="chip" text-anchor="middle">SERVE</text>
-  <text x="238" y="216" class="m">4 rounds · 12 cuppers</text>
+  <text x="238" y="216" class="m">size M · 3 rounds · 6 cuppers</text>
   <path d="M60 238H492" stroke="#D8C9B8" stroke-dasharray="4 4"/>
   <text x="60" y="262" class="label">CUPPING</text>
   <text x="60" y="284" class="m b">R1</text>
@@ -46,9 +46,8 @@
   <text x="492" y="304" class="m dim" text-anchor="end">fixed, house note</text>
   <text x="60" y="324" class="m b">R3</text>
   <text x="96" y="324" class="m"><tspan class="ok">clean</tspan></text>
-  <text x="60" y="344" class="m b">R4</text>
-  <text x="96" y="344" class="m"><tspan class="ok">clean</tspan></text>
-  <text x="492" y="344" class="m dim" text-anchor="end"><tspan class="ok">2 clean in a row</tspan></text>
+  <text x="492" y="324" class="m dim" text-anchor="end"><tspan class="ok">served</tspan></text>
+  <text x="96" y="344" class="m dim">size M: 2 cuppers a round, 1 clean round serves</text>
   <path d="M60 364H492" stroke="#D8C9B8" stroke-dasharray="4 4"/>
   <text x="60" y="388" class="label">RECIPE</text>
   <text x="492" y="388" class="m ok b" text-anchor="end">3 of 3 PASS</text>
@@ -86,22 +85,21 @@
   <circle cx="548" cy="212" r="11" fill="#6F4E37"/><text x="548" y="216.5" class="num" text-anchor="middle">1</text>
   <text x="568" y="217" class="ct">The verdict</text>
   <text x="568" y="237" class="cl">Only cafe.py check can say SERVE.</text>
-  <text x="568" y="255" class="cl">If five rounds pass without it, the receipt</text>
+  <text x="568" y="255" class="cl">If the round limit passes without it, the receipt</text>
   <text x="568" y="273" class="cl">says CLOSE and lists the defects still open.</text>
   <path d="M516 302H537" stroke="#C9B8A6" stroke-dasharray="2 3"/>
   <circle cx="516" cy="302" r="3.5" fill="#C08552"/>
   <circle cx="548" cy="302" r="11" fill="#6F4E37"/><text x="548" y="306.5" class="num" text-anchor="middle">2</text>
   <text x="568" y="307" class="ct">Every round it took</text>
-  <text x="568" y="327" class="cl">Three fresh cuppers tasted it each round.</text>
-  <text x="568" y="345" class="cl">It ended after two clean rounds in a row,</text>
+  <text x="568" y="327" class="cl">Fresh cuppers tasted it each round, as many</text>
+  <text x="568" y="345" class="cl">as the size calls for. It ended on a clean round,</text>
   <text x="568" y="363" class="cl">not when the AI felt done.</text>
   <path d="M516 452H537" stroke="#C9B8A6" stroke-dasharray="2 3"/>
   <circle cx="516" cy="452" r="3.5" fill="#C08552"/>
   <circle cx="548" cy="452" r="11" fill="#6F4E37"/><text x="548" y="456.5" class="num" text-anchor="middle">3</text>
   <text x="568" y="457" class="ct">Proof for each criterion</text>
   <text x="568" y="477" class="cl">Every acceptance criterion with the command</text>
-  <text x="568" y="495" class="cl">that proves it. A first-time customer checked</text>
-  <text x="568" y="513" class="cl">each one again on the real thing.</text>
+  <text x="568" y="495" class="cl">that proves it, run again on the finished work.</text>
   <path d="M516 571H537" stroke="#C9B8A6" stroke-dasharray="2 3"/>
   <circle cx="516" cy="571" r="3.5" fill="#C08552"/>
   <circle cx="548" cy="571" r="11" fill="#6F4E37"/><text x="548" y="575.5" class="num" text-anchor="middle">4</text>

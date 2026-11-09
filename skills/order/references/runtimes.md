@@ -27,6 +27,6 @@ When full verification is unavailable:
 1. State the missing capability once. Write the recipe and make the changes and checks the available tools permit. If files cannot be written, give a patch or the content in the response.
 2. Use the cupping viewpoints for a bounded self-review. Label it self-review; do not write `cup` rows for it or invent rehearsal or customer subagents. Do not run empty rounds to manufacture CLOSE.
 3. Keep real command output and label every unrun criterion NOT CHECKED. If notes cannot be written, keep the evidence in the response. If Python cannot run, do not simulate a `cafe.py` verdict.
-4. Hand over **UNVERIFIED**: the changes, the checks that actually ran, remaining findings, and what full verification needs. Leave commit, push, deployment, and other gated external actions pending. Never relabel UNVERIFIED as SERVE or CLOSE.
+4. Hand over **UNVERIFIED**, starting with the line `cafe.py version` printed (`cafe v?` if Python cannot run): the changes, the checks that actually ran, remaining findings, each process line the cleanup in SKILL.md kept, and what full verification needs. Leave commit, push, deployment, and other gated external actions pending. Never relabel UNVERIFIED as SERVE or CLOSE.
 
 If a full run loses a required tool or permission midway, keep the real notes and hand over the same way. On resume, verify the current files before reusing evidence.

@@ -1,6 +1,6 @@
 {
   "name": "cafe",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Mr. Latte's cafe for Claude Code. /cafe:order finishes what you order end to end: a fixed recipe, a tasting sized to the order, fresh cuppers every round, and a judge script that decides when it is ready to serve.",
   "author": {
     "name": "Mr. Latte",

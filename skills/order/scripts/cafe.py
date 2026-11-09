@@ -27,6 +27,8 @@ sizes   cuppers a round / clean rounds in a row to serve / round limit
 verdicts
   SERVE   enough clean rounds in a row after the last recipe change. Serve it.
   CLOSE   the round limit is reached. Close and report that it did not converge.
+          check lists the P0/P1 notes from the last round a cupper tasted onward:
+          the open defects a next order carries.
   REBREW  P0/P1 defects did not go down for two rounds in a row. Stop patching and recheck the design.
   RECUP   run another round.
 
@@ -35,6 +37,7 @@ Exit code: 0 for SERVE, 1 for any other verdict, 2 for a bad notes file.
 """
 import argparse
 import json
+import locale
 import os
 import shlex
 import sys
@@ -169,6 +172,16 @@ def add_rows(path, lines):
         raise NotesError(f"{e}. Nothing was written")
 
 
+def decode_rows(data, fallback):
+    """Rows on stdin: UTF-8 (a BOM allowed), as agents send them, else the console's own code page."""
+    for encoding in ("utf-8-sig", fallback):
+        try:
+            return data.decode(encoding).splitlines()
+        except (UnicodeDecodeError, LookupError, TypeError):
+            continue
+    raise NotesError("stdin is neither UTF-8 nor the console's encoding. Nothing was written")
+
+
 def order_size(rows):
     sizes = [note for _, e, _, _, note in rows if e == "size"]
     if not sizes:
@@ -240,6 +253,10 @@ def judge(rows, max_rounds=None, notes="<notes>"):
         return "SERVE", reasons
     if last >= max_rounds:
         reasons.append(f"reached the {max_rounds} round limit")
+        tasted = [r for r in rounds if stat[r]["tasted"]]
+        since = tasted[-1] if tasted else rounds[0]  # a fix nobody tasted since is still open
+        still = [f"open {s}: {note}" for r, e, s, _, note in rows if r >= since and e == "defect" and s in SERIOUS]
+        reasons += list(dict.fromkeys(still)) or ["open P0/P1: none"]
         return "CLOSE", reasons
     nxt = f"next: round {last + 1} with {min_cuppers} cupper(s)"
     window = [stat[r]["serious"] for r in rounds if r > last_rebrew]
@@ -328,6 +345,24 @@ def self_test():
     failed += not ok
     print(f"{'ok  ' if ok else 'FAIL'} check says when there is no size row")
 
+    closing = [size("S"), (1, "cup", "-", "yes", "t"), (1, "defect", "P1", "-", "old bug"),
+               (2, "cup", "-", "yes", "t"), (2, "defect", "P0", "-", "lost rows"), (2, "defect", "P1", "-", "empty page"),
+               (2, "defect", "P2", "-", "typo"), (3, "cup", "-", "yes", "t"), (3, "defect", "P1", "-", "empty page"),
+               (3, "defect", "P1", "-", "empty page")]
+    got, lines = judge(closing)
+    still = [line for line in lines if line.startswith("open ")]
+    ok = got == "CLOSE" and still == ["open P1: empty page"]
+    got2, lines2 = judge(notes(size("L"), *dirty(1, 1), *dirty(2, 1), *dirty(3, 2), *dirty(4, 1), *clean(5)))
+    ok = ok and got2 == "CLOSE" and "open P0/P1: none" in lines2
+    _, lines3 = judge(notes(size("S"), *dirty(1, 1, n=1)))
+    ok = ok and not any(line.startswith("open ") for line in lines3)
+    untasted = [size("S"), (1, "cup", "-", "yes", "t"), (1, "defect", "P1", "-", "first"),
+                (2, "cup", "-", "yes", "t"), (2, "defect", "P1", "-", "fix untested"), (3, "cup", "-", "no", "t")]
+    got4, lines4 = judge(untasted)
+    ok = ok and got4 == "CLOSE" and [line for line in lines4 if line.startswith("open ")] == ["open P1: fix untested"]
+    failed += not ok
+    print(f"{'ok  ' if ok else 'FAIL'} CLOSE lists only the last round's P0/P1: {still}")
+
     got, _ = judge(notes(size("S"), *dirty(1, 1, n=1), *dirty(2, 1, n=1)), max_rounds=2)
     ok = got == "CLOSE"
     failed += not ok
@@ -343,6 +378,12 @@ def self_test():
         failed += 1
         print(f"FAIL {name}: expected an error")
 
+    ok = (decode_rows("1 drop '빈 페이지'\n".encode(), "cp1252") == ["1 drop '빈 페이지'"]
+          and decode_rows(b"\xef\xbb\xbf1 drop x", "utf-8") == ["1 drop x"]
+          and decode_rows(b"1 drop caf\xe9", "cp1252") == ["1 drop café"])
+    failed += not ok
+    print(f"{'ok  ' if ok else 'FAIL'} stdin rows: UTF-8, a BOM, or the console's code page")
+    expect_error("stdin in no encoding it can read", lambda: decode_rows(b"1 drop \xff\xfe", "utf-8"))
     expect_error("missing round", lambda: judge(notes(*clean(1), *clean(3))))
     expect_error("defect without severity", lambda: validate(1, "defect", "-", "-"))
     expect_error("unknown severity", lambda: validate(1, "defect", "P9", "-"))
@@ -420,6 +461,9 @@ def main():
     sub.add_parser("version", help='print "cafe v<version>" for the progress lines')
     sub.add_parser("self-test", help="check the verdict rules")
     args = p.parse_args()
+    for stream in (sys.stdout, sys.stderr):  # a note must never crash check on a console that cannot print it
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
 
     if args.cmd == "version":
         print(f"cafe v{version()}")
@@ -429,7 +473,8 @@ def main():
             add(args.notes, args.round, args.event, args.severity, args.tasted, args.note)
             return 0
         if args.cmd == "add-rows":
-            add_rows(args.notes, sys.stdin.read().splitlines())
+            data = sys.stdin.buffer.read() if sys.stdin is not None else b""
+            add_rows(args.notes, decode_rows(data, locale.getpreferredencoding(False)))
             return 0
         if args.cmd == "check":
             verdict, reasons = judge(read_notes(args.notes), args.max_rounds, args.notes)

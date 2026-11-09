@@ -33,7 +33,7 @@ AI-built work has a familiar loop. You review it and find problems. You fix them
 
 - **Finished means finished.** Only `cafe.py check` can end the work, not the AI's own sense of being done. If the work does not converge within its round limit, the report says so.
 - **Sized to the order.** A one-file fix gets one cupper a round. A feature across layers gets three. The judge script holds each order to its size.
-- **You can see where it is.** Each step prints one line that starts with the skill version, such as `[cafe v0.2.2 3/4 Cupping R1] 1 cupper tasting: Customer x Order sheet`, and the steps show up in the host's task list or plan.
+- **You can see where it is.** Each step prints one line that starts with the skill version, such as `[cafe v0.2.3 3/4 Cupping R1] 1 cupper tasting: Customer x Order sheet`, and the steps show up in the host's task list or plan.
 - **Evidence, not opinions.** A finding counts only with a command and its output, a failing test, or the line and the criterion it breaks.
 - **A second opinion without a second AI.** Fresh subagents with new viewpoints and methods do what another AI would.
 - **Fewer interruptions.** Ordinary choices become written assumptions. Host approval requirements still apply. It pushes, deploys, or deletes data only when your order says so and verification passes.
@@ -195,7 +195,7 @@ AI로 만든 결과물은 리뷰할 때마다 새 문제가 나옵니다. 고치
 
 - **끝났다고 하면 정말 끝난 것입니다.** 작업을 끝내는 것은 AI의 느낌이 아니라 `cafe.py check`입니다. 라운드 한도 안에 수렴하지 않으면 그렇다고 보고합니다.
 - **주문 크기만큼만 맛봅니다.** 파일 하나를 고치는 주문은 라운드마다 커퍼가 하나이고, 여러 층에 걸친 기능은 셋입니다. 판정 스크립트가 주문마다 정한 크기를 지킵니다.
-- **지금 어디쯤인지 보입니다.** 단계마다 스킬 버전으로 시작하는 `[cafe v0.2.2 3/4 커핑 R1] 커퍼 1명 맛보는 중: 손님 x 주문표` 같은 한 줄을 남기고, 도구의 작업 목록에도 단계가 뜹니다.
+- **지금 어디쯤인지 보입니다.** 단계마다 스킬 버전으로 시작하는 `[cafe v0.2.3 3/4 커핑 R1] 커퍼 1명 맛보는 중: 손님 x 주문표` 같은 한 줄을 남기고, 도구의 작업 목록에도 단계가 뜹니다.
 - **의견이 아니라 증거만 남습니다.** 명령과 출력, 실패하는 테스트, 또는 어긴 수용 기준과 코드 위치가 있어야 지적으로 인정합니다.
 - **AI 하나로 두 번째 의견을 얻습니다.** 새 관점과 방법을 받은 새 서브에이전트가 다른 AI의 몫을 합니다.
 - **불필요한 질문을 줄입니다.** 일반적인 선택은 가정으로 적어 보고서에 남깁니다. 실행 환경의 승인 절차는 따릅니다. 푸시, 배포, 데이터 삭제는 주문에 적혀 있고 검증을 통과했을 때만 합니다.

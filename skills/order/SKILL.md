@@ -87,13 +87,17 @@ Everything lives at the project root. `<order>` is a short slug for the task.
 
 With git, add `.cafe/*/` once to the file `git rev-parse --git-path info/exclude` names, if permitted; otherwise record that and keep the folders unstaged. Never stage `.cafe/` unless the order asks.
 
-Before you make a folder, read each `.cafe/*/recipe.md`. If any has this order's goal, take the one with the highest number: `<order>` is 1, then `<order>-2`, `<order>-3`, and so on (compare the numbers, not the names). If its cupping.tsv has no rounds (`cafe.py check` says "no cupping rounds yet"), continue it at Brew; if it is `<order>-<n>`, first add to its recipe each open P0 or P1 of the folder before it that the recipe lacks, since a cut while starting it can leave them out, and raise the size if the criteria no longer fit it. Otherwise run `cafe.py check` on it:
+**Cleanup.** Each cupper lists in its scratch folder the background processes it starts (`pids.txt`) and its temp folder (`temp-path.txt`). To clean up scratch folders: for each `pids.txt` line, skip a process only when `kill -0` says no such process (a refusal, such as operation not permitted, means it may still run), stop one `ps` confirms is that process (the same command), and keep every other line, and any the host would not let you stop, for "Left for you"; then delete the folder each `temp-path.txt` names if it is a `cafe.` folder whose parent is in no repository. Run it on a cupper's folder when the cupper ends without a report, on every scratch folder of the order and of its earlier numbers when you resume it, and on all of them again just before the receipt or a hand-over, which lists every line it kept. The files stay, so the list is never lost.
+
+Before you make a folder, read each `.cafe/*/recipe.md`. If any has this order's goal, take the one with the highest number: `<order>` is 1, then `<order>-2`, `<order>-3`, and so on (compare the numbers, not the names), and run the cleanup. If its cupping.tsv has no rounds (`cafe.py check` says "no cupping rounds yet"), continue it at Brew; if it is `<order>-<n>`, first add to its recipe each open P0 or P1 of the folder before it that the recipe lacks, since a cut while starting it can leave them out, and raise the size if the criteria no longer fit it. Otherwise run `cafe.py check` on it:
 
 - RECUP or REBREW: the order was cut off. Continue it, but recheck the current files and acceptance checks first: old evidence cannot certify new changes, so the next round tastes whatever changed.
 - SERVE: go to serve. Old evidence cannot certify the current files, so serve step 1 runs again, and for L a new first-time customer runs even if one ran before. Add no rows to these notes.
-- CLOSE, or a failure in that serve: these notes have spent their round limit, so more rounds in them can only CLOSE again. Start the next folder, `<order>-<n+1>`, as a new order. Its first write, before Recipe step 1, is its recipe: the old one plus each open P0 and P1 (the last round's, and any serve failure) as an acceptance criterion with its repro as the check, never as a defect row. Then recheck each criterion against the current files, and raise the size if the criteria no longer fit it.
+- CLOSE, or a failure in that serve: these notes have spent their round limit, so more rounds in them can only CLOSE again. Start the next folder, `<order>-<n+1>`, as a new order. Its first write, before Recipe step 1, is its recipe: the old one plus each open P0 and P1 as an acceptance criterion with its repro as the check, never as a defect row. The open ones are those `cafe.py check` lists (cupping.tsv holds their exact text), and any serve failure of a finished order asked again, which has no row. Then recheck each criterion against the current files, which removes none: one that passes today stays and gets tasted. Raise the size if the criteria no longer fit it.
 
 ## 1. Recipe
+
+A recipe The bar already wrote for `<order>-<n>` keeps every criterion through these steps: step 1 picks a size that fits them, and step 2 only adds to the recipe; never trim or drop a criterion to fit a size.
 
 1. Restate the order in your own words: the goal, the problem it solves, and the smallest change you expect. Where the order leaves a choice open, pick the reasonable option and write it under Assumptions with the option you did not pick. Pick the size and log it.
 2. Write `.cafe/<order>/recipe.md`, with acceptance criteria within the size's limit.
@@ -133,10 +137,10 @@ For each round R, starting at 1:
 
 1. Save `git rev-parse HEAD`, `git status --short`, and `git diff` to `.cafe/<order>/scratch/R<R>-before.txt`, or without git, a list of files with their modification times.
 2. Take round R's row from the cupping table and as many of its cuppers as the size needs. Each brief is the cupper brief with only the `<>` filled in and nothing added. The scope must include uncommitted changes and the new files this order created; `git diff` alone leaves out untracked files.
-3. Launch the cuppers with the host's subagent tool, in parallel if capacity and the project's instructions permit, otherwise one after another in separate fresh contexts. Wait for every report before you record or judge the round. Only the barista writes cupping.tsv. If a cupper ends without a report (an error, a crash, a cut-off), delete the folder its `temp-path.txt` names if that is a `cafe.` folder outside the project, and launch one new cupper with the same brief and scratch folder `R<r>-<n>b` in the same round; log cup rows only for cuppers that reported. If the new one also ends without a report, the host has lost its subagents: keep the notes and hand over as in Limited verification.
+3. Launch the cuppers with the host's subagent tool, in parallel if capacity and the project's instructions permit, otherwise one after another in separate fresh contexts. Wait for every report before you record or judge the round. Only the barista writes cupping.tsv. If a cupper ends without a report (an error, a crash, a cut-off), run the cleanup (The bar) on its scratch folder. Then launch one new cupper with the same brief and scratch folder `R<r>-<n>b` in the same round; log cup rows only for cuppers that reported. If the new one also ends without a report, give it the same cleanup; the host has lost its subagents, so keep the notes and hand over as in Limited verification.
 4. Compare the project with the saved state. Restore only changes a cupper made; keep pre-existing and concurrent user changes. Never reset the whole working tree. Stop each process a cupper reported still running, by its PID, and nothing else.
 5. Write one row per cupper: `R cup -t yes|no "<viewpoint> x <method>"`. `yes` means that cupper ran something: a check, the code, a command, or a doc's examples.
-6. Judge each finding: keep it as `R defect -s P0|P1|P2 "<note>"` or drop it as `R drop "<reason>"`. Reproduce a finding yourself only when you would keep it as P0 or P1. Log the cupper's Minor list as P2 or drop without reproducing it. Findings with one cause are one defect.
+6. Judge each finding: keep it as `R defect -s P0|P1|P2 "<note>"` or drop it as `R drop "<reason>"`. Reproduce a finding yourself only when you would keep it as P0 or P1. Log the cupper's Minor list as P2 or drop without reproducing it. Findings with one cause are one defect. A finding that repeats an earlier round's P0 or P1 is still open: log it again as a defect in this round, never as a duplicate drop. A P0 or P1 note names its repro command.
 
    - P0: data loss, security, crash
    - P1: breaks an acceptance criterion
@@ -170,7 +174,7 @@ For each round R, starting at 1:
 1. Check the finished work.
    - S and M: rerun every acceptance check yourself, and the whole suite once if the project allows it. Keep each command and its output for the receipt.
    - L: once per order, a first-time customer: a fresh subagent that never saw the work gets only recipe.md, the result, and cupping.tsv. It checks each acceptance criterion on the real thing, reporting PASS or FAIL with evidence, and rechecks every `drop` and P2 row for any that really are P0 or P1 in real use. If it reopens the order, the next SERVE goes straight to the receipt, because the new rounds' cuppers tasted the fix.
-2. If anything fails or turns out to be P0 or P1, reproduce it, log it as `defect -s P0|P1` under the last round, add a house note, run `cafe.py check`, and follow the verdict. In a serve for a finished order asked again, log nothing: once it reproduces, start the next folder at once, as The bar says, with the failure in its first write.
+2. If anything fails or turns out to be P0 or P1, reproduce it, log it as `defect -s P0|P1` under the last round, add a house note, run `cafe.py check`, and follow the verdict. In a serve for a finished order asked again, add no row to the old notes (the house note still goes in): once it reproduces, start the next folder at once, as The bar says, with the failure in its first write.
 3. On SERVE, do the irreversible steps the order asked for, such as a commit and a push. After CLOSE, leave them for the user.
 4. Hand over the receipt: this template with the labels in the user's language, and "none" for an empty item.
 
@@ -188,7 +192,7 @@ For each round R, starting at 1:
    | 1 | <criterion> | PASS | `<command>` → <the output that proves it> |
 
    - **Changed:** <files>, +<added> −<removed>, <uncommitted, or the commit and where it was pushed>
-   - **Left for you:** <irreversible steps the order did not ask for, or that CLOSE held back>
+   - **Left for you:** <irreversible steps the order did not ask for, or that CLOSE held back, and each process line the cleanup kept>
    - **Assumed:** <each choice you made>, not <the option you did not pick>
    - **Remaining risks:** <each P2 left, and what it costs>
    - **Next orders:** <ideas outside the recipe>

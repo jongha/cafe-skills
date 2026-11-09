@@ -4,7 +4,18 @@
   cafe.py add <notes> <round> <event> [-s P0|P1|P2] [-t yes|no] <note>
   cafe.py add-rows <notes>   rows on stdin, one per line, each written as add's arguments after <notes>.
                              All rows are written or none, so a fixed batch can be rerun as a whole.
+                             A batch that is already the last rows of the notes (a retry after a cut)
+                             writes nothing, so a round is never logged twice.
   cafe.py check <notes> [--max-rounds N]
+  cafe.py fingerprint save <record> [<path>...]
+                             records the content hash of every file the project lists (git's tracked and
+                             untracked files that are not ignored, or every file without git), plus each path
+                             (a nested repository by its own git, a folder by every file in it, a missing path
+                             as absent); .git and .cafe are left out. Names nested repositories with changes
+                             it left out.
+  cafe.py fingerprint check <record>
+                             "same" (exit 0) or "changed" with each path (exit 1) against the record,
+                             "no record" (exit 2) without one. Content, not git: a commit changes nothing.
   cafe.py version            prints "cafe v<version>" from the cafe plugin.json beside the real script,
                              or "cafe v?" without one. Progress lines start with it.
   cafe.py self-test
@@ -36,10 +47,13 @@ A clean round has the size's cuppers, at least 1 cupper that ran something, and 
 Exit code: 0 for SERVE, 1 for any other verdict, 2 for a bad notes file.
 """
 import argparse
+import hashlib
 import json
 import locale
 import os
 import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -167,9 +181,13 @@ def add_rows(path, lines):
     if not rows:
         raise NotesError("no rows on stdin. Write one row per line")
     try:
+        written = read_notes(path)
+        if written[-len(rows):] == rows:  # a retry of a batch that went in: a second copy would count cuppers twice
+            return False
         append(path, rows)
     except NotesError as e:
         raise NotesError(f"{e}. Nothing was written")
+    return True
 
 
 def decode_rows(data, fallback):
@@ -269,6 +287,162 @@ def judge(rows, max_rounds=None, notes="<notes>"):
     return "RECUP", reasons
 
 
+SKIP_DIRS = (".git", ".cafe")
+
+
+def digest(path):
+    if not os.path.isfile(path):  # a FIFO or device would block open, a broken link has no content
+        return "not a file"
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(1 << 20), b""):
+                h.update(block)
+    except OSError:
+        try:
+            st = os.stat(path)  # unreadable: its size and time still change when it is edited
+        except OSError:
+            return "unreadable"
+        return f"unreadable {st.st_size} {st.st_mtime_ns}"
+    return h.hexdigest()
+
+
+def git_list(folder, *args):
+    """git's names in a folder, split on NUL: with -z git quotes no name (by default it prints a non-ASCII name
+    as "\\355\\225..."). Decoded as the file system names them. None where git cannot list here."""
+    try:
+        done = subprocess.run(["git", "-C", folder, "-c", "core.quotepath=off", *args], capture_output=True)
+    except OSError:
+        return None
+    if done.returncode:
+        return None
+    return [os.fsdecode(p) for p in done.stdout.split(b"\0") if p]
+
+
+def own_repository(folder):
+    return os.path.isdir(folder) and os.path.lexists(os.path.join(folder, ".git"))
+
+
+def walk(folder):
+    for top, dirs, names in os.walk(folder):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        yield from (os.path.join(top, n) for n in names)
+
+
+def project_files(folder):
+    """Every file git lists in folder (tracked, and untracked but not ignored), or every file without git.
+    A nested repository git shows as a folder (untracked, or a submodule) is listed by its own git."""
+    names = git_list(folder, "ls-files", "-z", "-c", "-o", "--exclude-standard")
+    if names is None:
+        yield from walk(folder)
+        return
+    for name in names:
+        path = os.path.join(folder, name.rstrip("/"))
+        if own_repository(path):
+            yield from project_files(path)
+        else:
+            yield path
+
+
+def key(path):
+    return os.path.normpath(path).replace(os.sep, "/")
+
+
+def served_files(paths):
+    """Every file the project lists, then each given path: a nested repository by its own git, another folder by
+    every file under it, a missing path as None. Keyed by path with / separators; .git and .cafe left out."""
+    files = {}
+    for path in ["."] + list(paths):
+        if path == "." or own_repository(path):
+            found = project_files(path)
+        elif os.path.isdir(path):
+            found = walk(path)
+        elif not os.path.lexists(path):
+            files.setdefault(key(path), None)
+            continue
+        else:
+            found = [path]
+        for f in found:
+            k = key(f)
+            if not set(k.split("/")) & set(SKIP_DIRS):
+                files[k] = digest(f) if os.path.lexists(f) else files.get(k)  # tracked but deleted: absent
+    return files
+
+
+def nested_with_changes(given):
+    """Nested repositories this project ignores that hold uncommitted changes and were not given as paths."""
+    out = []
+    for name in git_list(".", "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory") or []:
+        folder = name.rstrip("/")
+        if name.endswith("/") and key(folder) not in given and own_repository(folder):
+            if git_list(folder, "status", "--porcelain", "-z"):
+                out.append(key(folder))
+    return out
+
+
+def fingerprint_save(record, paths):
+    """Record every file the project lists and the given paths. Returns the number of files recorded, the paths
+    recorded as absent (deleted, or a wrong name), and the nested repositories with changes left out."""
+    paths = list(dict.fromkeys(paths))
+    for p in paths:
+        if len(p) > 1 and p[0] == p[-1] == '"' and not os.path.lexists(p):
+            raise NotesError(f"{p} is not there and looks like a name git quoted. Give the name as the file system "
+                             "has it (git -z prints it so). Nothing was saved")
+    data = {"cafe": "fingerprint", "version": 1, "paths": paths, "files": served_files(paths)}
+    folder = os.path.dirname(os.path.abspath(record))
+    try:
+        os.makedirs(folder, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=folder, prefix=".fingerprint.")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=1, sort_keys=True)
+            os.replace(tmp, record)  # whole or not at all: a cut leaves the old record or none
+        except BaseException:
+            os.unlink(tmp)
+            raise
+    except OSError as e:
+        raise NotesError(f"cannot save {record}: {e}. Nothing was saved")
+    files = data["files"]
+    return (sum(v is not None for v in files.values()), [k for k, v in files.items() if v is None],
+            nested_with_changes({key(p) for p in paths}))
+
+
+def fingerprint_check(record):
+    """("same" | "changed" | "no record", lines): every file the project lists and the recorded paths, against the record."""
+    if not os.path.exists(record):
+        return "no record", [f"nothing saved at {record}"]
+    try:
+        with open(record, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise NotesError(f"{record} is not a fingerprint record: {e}")
+    if not isinstance(data, dict):
+        data = {}
+    paths, old = data.get("paths"), data.get("files")
+    if (data.get("cafe") != "fingerprint" or not isinstance(paths, list)
+            or not all(isinstance(p, str) for p in paths) or not isinstance(old, dict)):
+        raise NotesError(f"{record} is not a fingerprint record: it needs paths and files")
+    new = served_files(paths)
+    lines = []
+    for k in sorted(set(old) | set(new)):
+        a, b = old.get(k), new.get(k)
+        if a != b:
+            lines.append(f"{'added' if a is None else 'removed' if b is None else 'changed'}: {k}")
+    return ("changed" if lines else "same"), lines
+
+
+def emit(lines):
+    """Print lines. A reader that stops early (head) is no error, so the exit code stays the verdict's."""
+    if sys.stdout is None:  # started with stdout closed: nothing to print to, and no reason to fail
+        return
+    try:
+        for line in lines:
+            print(line)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())  # no second error when Python flushes at exit
+
+
 def version(script=__file__):
     """The version in the cafe plugin.json at the root of the real skill folder, or "?" without one.
     plugin.json is the only place the version is written, so a progress line cannot show a stale one."""
@@ -360,6 +534,14 @@ def self_test():
                 (2, "cup", "-", "yes", "t"), (2, "defect", "P1", "-", "fix untested"), (3, "cup", "-", "no", "t")]
     got4, lines4 = judge(untasted)
     ok = ok and got4 == "CLOSE" and [line for line in lines4 if line.startswith("open ")] == ["open P1: fix untested"]
+    read_only = untasted + [(3, "defect", "P1", "-", "found by reading")]  # a later untasted round's finding is open too
+    got5, lines5 = judge(read_only)
+    ok = ok and got5 == "CLOSE" and [line for line in lines5 if line.startswith("open ")] == [
+        "open P1: fix untested", "open P1: found by reading"]
+    never = [size("S"), (1, "cup", "-", "no", "t"), (1, "defect", "P1", "-", "read only"),
+             (2, "cup", "-", "no", "t"), (3, "cup", "-", "no", "t")]  # no round tasted: open from round 1
+    got6, lines6 = judge(never)
+    ok = ok and got6 == "CLOSE" and [line for line in lines6 if line.startswith("open ")] == ["open P1: read only"]
     failed += not ok
     print(f"{'ok  ' if ok else 'FAIL'} CLOSE lists only the last round's P0/P1: {still}")
 
@@ -425,6 +607,109 @@ def self_test():
         ok = len(rows) == 9 and rows[-2] == (2, "defect", "P1", "-", "it's empty") and judge(rows)[0] == "RECUP"
         failed += not ok
         print(f"{'ok  ' if ok else 'FAIL'} a fixed batch writes every row once")
+        again = add_rows(path, [line.replace("Order sheet", "Order  sheet") for line in batch])
+        ok = again is False and read_notes(path) == rows
+        add_rows(path, ["2 drop 'another'"])
+        ok = ok and len(read_notes(path)) == 10
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} a rerun of the last batch writes nothing; a new batch appends")
+
+        tree = os.path.join(d, "served")
+        os.makedirs(os.path.join(tree, "src", ".cafe"))
+        for name, text in (("a.txt", "a"), ("src/b.txt", "b"), ("src/.cafe/x", "x")):
+            with open(os.path.join(tree, name), "w", encoding="utf-8") as f:
+                f.write(text)
+        record = os.path.join(tree, ".cafe", "o", "served.json")
+        here = os.getcwd()
+        os.chdir(tree)
+        try:
+            saved = fingerprint_save(record, ["a.txt", "src", "gone.txt"])[0]
+            states = [fingerprint_check(record)[0]]
+            with open("src/b.txt", "w", encoding="utf-8") as f:
+                f.write("b2")
+            states.append(fingerprint_check(record))
+            with open("src/b.txt", "w", encoding="utf-8") as f:
+                f.write("b")
+            with open("src/.cafe/y", "w", encoding="utf-8") as f:
+                f.write("y")
+            states.append(fingerprint_check(record)[0])
+            with open("gone.txt", "w", encoding="utf-8") as f:
+                f.write("g")
+            states.append(fingerprint_check(record))
+            states.append(fingerprint_check("none.json")[0])
+        finally:
+            os.chdir(here)
+        ok = (saved == 2 and states[0] == "same" and states[1] == ("changed", ["changed: src/b.txt"])
+              and states[2] == "same" and states[3] == ("changed", ["added: gone.txt"]) and states[4] == "no record")
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} fingerprint: same, changed, added, .cafe left out, no record")
+        with open(record, "w", encoding="utf-8") as f:
+            f.write("[1, 2]")
+        expect_error("a record that is not a fingerprint", lambda: fingerprint_check(record))
+        expect_error("a name git quoted", lambda: fingerprint_save(record, ['"\\355\\225\\234.md"']))
+
+        def g(folder, *args):
+            subprocess.run(["git", "-C", folder, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                            "-c", "core.hooksPath=/dev/null", *args], check=True, capture_output=True)
+
+        def write(name, text):
+            os.makedirs(os.path.dirname(name) or ".", exist_ok=True)
+            with open(name, "w", encoding="utf-8") as f:
+                f.write(text)
+
+        if shutil.which("git") is None:
+            print("skip fingerprint over git: no git on this host")
+        else:
+            repo = os.path.join(d, "repo")
+            os.makedirs(repo)
+            os.chdir(repo)
+            try:
+                g(".", "init", "-q")
+                for name, text in (("한글 이름.md", "a"), ("old.txt", "o"), ("keep.txt", "k"), (".gitignore", "*.log\nsvc/\n")):
+                    write(name, text)
+                unborn = fingerprint_save(".cafe/unborn.json", [])[0]  # no commit yet
+                g(".", "add", "-A")
+                g(".", "commit", "-qm", "base")
+                g(".", "checkout", "-qb", "feature")  # a branch to finish: its own commit is served too
+                write("feature.py", "f")
+                g(".", "add", "-A")
+                g(".", "commit", "-qm", "branch")
+                for name, text in (("한글 이름.md", "edited"), ("새 파일.txt", "new"), ("debug.log", "ignored"),
+                                   (".cafe/notes.tsv", "x"), ("sub/.cafe/x", "x"), ("inner/app.js", "a"),
+                                   ("inner/.gitignore", "node_modules/\n"), ("inner/node_modules/m.js", "m"), ("svc/x.ts", "x")):
+                    write(name, text)
+                os.remove("old.txt")
+                g(".", "mv", "keep.txt", "moved.txt")
+                g("inner", "init", "-q")
+                g("inner", "add", "-A")
+                g("inner", "commit", "-qm", "inner")
+                g("svc", "init", "-q")
+                saved, absent, nested = fingerprint_save(".cafe/served.json", [])
+                files = sorted(json.load(open(".cafe/served.json", encoding="utf-8"))["files"])
+                g(".", "add", "-A")
+                g(".", "commit", "-qm", "served")
+                states = [fingerprint_check(".cafe/served.json")[0]]
+                write("keep.txt", "back")
+                states.append(fingerprint_check(".cafe/served.json"))
+                os.remove("keep.txt")
+                write("inner/app.js", "a2")
+                states.append(fingerprint_check(".cafe/served.json"))
+                with_svc = fingerprint_save(".cafe/svc.json", ["svc"])
+            except (OSError, subprocess.CalledProcessError) as e:
+                files, states, with_svc = None, None, None
+                print(f"FAIL fingerprint over git: a git step failed ({e})")
+            finally:
+                os.chdir(here)
+            ok = (files == [".gitignore", "feature.py", "inner/.gitignore", "inner/app.js", "moved.txt", "old.txt",
+                            "새 파일.txt", "한글 이름.md"]
+                  and unborn == 4 and saved == 7 and absent == ["old.txt"] and nested == ["svc"]
+                  and states == ["same", ("changed", ["added: keep.txt"]), ("changed", ["changed: inner/app.js"])]
+                  and with_svc[2] == [] and with_svc[0] == 8)  # the 7 still there and svc/x.ts
+            failed += not ok
+            if not ok:
+                print("  got", files, unborn, saved, absent, nested, states, with_svc)
+            print(f"{'ok  ' if ok else 'FAIL'} fingerprint over git: no commit yet, a branch's commits, non-ASCII names, "
+                  "renamed, deleted, ignored, .cafe at any depth, nested repositories")
 
         with open(path, "a", encoding="utf-8") as f:
             f.write("2 cup - yes a row split by spaces\n")
@@ -458,6 +743,13 @@ def main():
     c = sub.add_parser("check", help="decide whether it is ready to serve")
     c.add_argument("notes")
     c.add_argument("--max-rounds", type=int, default=None, help="override the size's round limit")
+    f = sub.add_parser("fingerprint", help="record the served files on SERVE, or check them against the record")
+    fsub = f.add_subparsers(dest="fp", required=True)
+    fs = fsub.add_parser("save", help="record every file the project lists, and each nested repository or path given")
+    fs.add_argument("record")
+    fs.add_argument("paths", nargs="*")
+    fc = fsub.add_parser("check", help="same, changed, or no record")
+    fc.add_argument("record")
     sub.add_parser("version", help='print "cafe v<version>" for the progress lines')
     sub.add_parser("self-test", help="check the verdict rules")
     args = p.parse_args()
@@ -466,7 +758,7 @@ def main():
             stream.reconfigure(errors="backslashreplace")
 
     if args.cmd == "version":
-        print(f"cafe v{version()}")
+        emit([f"cafe v{version()}"])
         return 0
     try:
         if args.cmd == "add":
@@ -474,19 +766,43 @@ def main():
             return 0
         if args.cmd == "add-rows":
             data = sys.stdin.buffer.read() if sys.stdin is not None else b""
-            add_rows(args.notes, decode_rows(data, locale.getpreferredencoding(False)))
+            if not add_rows(args.notes, decode_rows(data, locale.getpreferredencoding(False))):
+                emit([f"these rows are already the last rows of {args.notes}, so nothing was written (a rerun of a batch "
+                      "that went in). To log the same rows again, tell them apart in the note"])
             return 0
         if args.cmd == "check":
             verdict, reasons = judge(read_notes(args.notes), args.max_rounds, args.notes)
-            print(verdict)
-            for line in reasons:
-                print(f"  {line}")
+            emit([verdict] + [f"  {line}" for line in reasons])
             return 0 if verdict == "SERVE" else 1
+        if args.cmd == "fingerprint":
+            if args.fp == "save":
+                n, absent, nested = fingerprint_save(args.record, args.paths)
+                emit([f"saved {n} file(s) to {args.record}"] + [f"  absent (deleted, or a wrong name): {p}" for p in absent]
+                     + [f"  nested repository with changes, not recorded: {p} (pass it if a tasted file is in it)"
+                        for p in nested])
+                return 0
+            result, lines = fingerprint_check(args.record)
+            emit([result] + [f"  {line}" for line in lines])
+            return {"same": 0, "changed": 1}.get(result, 2)
         return self_test()
     except NotesError as e:
-        print(f"notes error: {e}", file=sys.stderr)
+        try:
+            print(f"notes error: {e}", file=sys.stderr)
+        except BrokenPipeError:  # a closed stderr changes no exit code
+            pass
         return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        code = main()
+    except SystemExit as e:  # argparse: --help, or a bad argument
+        code = e.code
+    except BrokenPipeError:  # self-test into a reader that stopped early: it did not finish
+        code = 1
+    try:
+        if sys.stdout is not None:
+            sys.stdout.flush()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())  # no second error when Python exits
+    sys.exit(code)

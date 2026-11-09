@@ -47,6 +47,7 @@ A clean round has the size's cuppers, at least 1 cupper that ran something, and 
 Exit code: 0 for SERVE, 1 for any other verdict, 2 for a bad notes file.
 """
 import argparse
+import errno
 import hashlib
 import json
 import locale
@@ -56,7 +57,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 HEADER = ["round", "event", "severity", "tasted", "note"]
 EVENTS = ("size", "cup", "defect", "drop", "recipe", "rebrew")
@@ -330,7 +341,10 @@ def git_list(folder, *args):
     """git's names in a folder, split on NUL: with -z git quotes no name (by default it prints a non-ASCII name
     as "\\355\\225..."). Decoded as the file system names them. None where git cannot list here."""
     try:
-        done = subprocess.run(["git", "--no-optional-locks", "-C", folder, "-c", "core.quotepath=off", *args],
+        # -c reaches the gits this one starts (a submodule's status), where a flag would not: the user's own config
+        # must not hide a new file or a submodule's changes there
+        done = subprocess.run(["git", "--no-optional-locks", "-C", folder, "-c", "core.quotepath=off",
+                               "-c", "status.showUntrackedFiles=normal", "-c", "diff.ignoreSubmodules=none", *args],
                               capture_output=True, env=git_env())  # no index refresh written into the user's repositories
     except OSError:
         return None
@@ -370,10 +384,16 @@ def key(path):
     return os.path.normpath(path).replace(os.sep, "/")
 
 
+def nfc(name):
+    """One form for comparing names: git on macOS prints NFC, while the disk keeps NFD where Finder wrote it."""
+    return unicodedata.normalize("NFC", name)
+
+
 def served_files(paths, skip=(), repos=None):
     """Every file the project lists, then each given path: a nested repository by its own git, another folder by
     every file under it, a missing path as None. Keyed by path with / separators; .git, .cafe, and skip left out."""
     repos = [] if repos is None else repos
+    skip = {nfc(s) for s in skip}
     files = {}
     for path in ["."] + list(paths):
         if path == "." or (os.path.isdir(path) and os.path.lexists(os.path.join(path, ".git"))):  # a link to one too
@@ -381,14 +401,14 @@ def served_files(paths, skip=(), repos=None):
         elif os.path.isdir(path):
             found = walk(path)
         elif not os.path.lexists(path):
-            if not set(key(path).split("/")) & set(SKIP_DIRS) and key(path) not in skip:
-                files.setdefault(key(path), None)
+            if not set(key(path).split("/")) & set(SKIP_DIRS) and nfc(key(path)) not in skip:
+                files.setdefault(nfc(key(path)), None)
             continue
         else:
             found = [path]
         for f in found:
-            k = key(f)
-            if not set(k.split("/")) & set(SKIP_DIRS) and k not in skip:
+            k = nfc(key(f))  # one key for a file git lists in NFC and a passed folder's walk finds in NFD
+            if not set(k.split("/")) & set(SKIP_DIRS) and k not in skip and os.path.basename(k) != LOCK_NAME:
                 files[k] = digest(f) if os.path.lexists(f) else files.get(k)  # tracked but deleted: absent
     return files
 
@@ -417,8 +437,11 @@ def repositories_below(folder, depth=3):
 def nested_with_changes(given, repos, walked=()):
     """Nested repositories that a listed repository ignores, that hold uncommitted changes, and that were not given.
     git folds an ignored folder into one entry (repos/), so a folder that is not a repository is searched below."""
+    given, walked = {nfc(g) for g in given}, {nfc(g) for g in walked}  # given as the disk spells it, k as git prints it
+
     def covered(k):  # given as the repository itself, or under a plain folder walked whole. A path inside it records
         # only that path, and a given repository's own git leaves out the repositories it ignores: neither covers k
+        k = nfc(k)
         return any(g == k or (k.startswith(g + "/") and g in walked) for g in given)
 
     out, seen, todo = [], set(), list(repos)
@@ -430,11 +453,16 @@ def nested_with_changes(given, repos, walked=()):
                 continue
             for found in [top] if own_repository(top) else repositories_below(top):
                 k = key(found)
-                if k in seen:
+                if nfc(k) in seen:
                     continue
-                seen.add(k)
+                seen.add(nfc(k))
                 todo.append(found)  # its own ignored repositories too
-                if not covered(k) and git_list(found, "status", "--porcelain", "-z", "--untracked-files=normal"):  # whatever the config hides
+                if covered(k):
+                    continue
+                # whatever the config hides: untracked files, and a submodule's changes (ignore = dirty or all)
+                status = git_list(found, "status", "--porcelain", "-z", "--untracked-files=normal",
+                                  "--ignore-submodules=none")
+                if status != []:  # changes, or a status git could not give (a broken submodule): either may hide one
                     out.append(k)
     return out
 
@@ -519,6 +547,73 @@ class InFolder:
             os.chdir(self.back)
 
 
+LOCK_SECONDS = 60  # under the 120-second limit hosts often put on one tool call, so the error shows
+LOCK_NAME = ".cafe-fingerprint.lock"  # one per folder: no project file has this name, and it adds no length to a name
+
+
+class RecordLock:
+    """One save of a record at a time: a save merges the paths the record has, so two at once (parallel tool calls)
+    would drop one. The lock is LOCK_NAME beside the record, kept afterwards: a removed lock could be taken anew while
+    another save still holds the old one. The wait is bounded (CAFE_LOCK_SECONDS), so a hung save ends in an error."""
+
+    def __init__(self, record):
+        self.path = os.path.join(os.path.dirname(record), LOCK_NAME)
+        self.fd = None
+
+    def held_elsewhere(self):
+        try:
+            if fcntl is not None:
+                fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            elif msvcrt is not None:
+                os.lseek(self.fd, 0, os.SEEK_SET)
+                msvcrt.locking(self.fd, msvcrt.LK_NBLCK, 1)
+        except BlockingIOError:
+            return True
+        except OSError as e:
+            if fcntl is None and e.errno in (errno.EACCES, errno.EDEADLK):  # msvcrt: locked by another save
+                return True
+            return False  # a file system without locks: save as before
+        return False
+
+    @staticmethod
+    def seconds():
+        try:
+            seconds = float(os.environ.get("CAFE_LOCK_SECONDS", LOCK_SECONDS))
+        except ValueError:
+            return LOCK_SECONDS
+        return seconds if 0 <= seconds <= 3600 else LOCK_SECONDS  # nan, inf, or below 0 would never end the wait
+
+    def __enter__(self):
+        seconds = self.seconds()
+        try:
+            self.fd = os.open(self.path, os.O_RDONLY | os.O_CREAT, 0o644)  # read is enough to lock: a lock another
+            # user left read-only still works
+        except OSError as e:
+            raise NotesError(f"cannot save: cannot open the lock {self.path}: {e}. Nothing was saved")
+        end = time.monotonic() + seconds
+        while self.held_elsewhere():
+            if time.monotonic() >= end:
+                os.close(self.fd)
+                raise NotesError(f"this save waited {seconds:g} seconds for another save that holds {self.path}. "
+                                 "Wait for that one to end, or stop it, and save again. Nothing was saved")
+            time.sleep(0.1)
+        return self
+
+    def __exit__(self, *exc):
+        if fcntl is None and msvcrt is not None:
+            try:
+                os.lseek(self.fd, 0, os.SEEK_SET)
+                msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        os.close(self.fd)  # closing it also releases flock
+
+
+def own_files(record, root):
+    """The record and its lock: neither is a file of the project, wherever the record sits."""
+    return {relative(record, root), relative(os.path.join(os.path.dirname(record), LOCK_NAME), root)}
+
+
 def fingerprint_save(record, paths):
     """Record every file the project lists and the given paths. Returns the number of files recorded, the paths
     recorded as absent (deleted, or a wrong name), and the nested repositories with changes left out."""
@@ -530,21 +625,33 @@ def fingerprint_save(record, paths):
     outside_root(record)
     root = project_of(record)
     paths = [relative(p.rstrip("/\\") or p, root) for p in paths]  # one name for each form
-    if os.path.lexists(record):  # replace only a record: a mixed-up argument must not overwrite the notes or a source
-        try:
-            with open(record, encoding="utf-8") as f:
-                old = json.load(f)
-        except (OSError, ValueError, RecursionError):
-            old = None
-        if not (isinstance(old, dict) and old.get("cafe") == "fingerprint" and isinstance(old.get("paths"), list)):
-            raise NotesError(f"{record} exists and is not a fingerprint record, so save will not replace it. "
-                             "Give the record path, .cafe/<order>/served.json. Nothing was saved")
-        paths = [p for p in old["paths"] if isinstance(p, str)] + paths  # saving again keeps the paths given before
+    saved_paths(record)  # refused before the lock, so a mixed-up argument leaves no <name>.lock beside a source
+    with RecordLock(record):  # from reading the paths the record has to writing it
+        return save_locked(record, saved_paths(record) + paths, root)  # saving again keeps the paths given before
+
+
+def saved_paths(record):
+    """The paths an existing record has, [] without one. Replace only a record: a mixed-up argument must not
+    overwrite the notes or a source."""
+    if not os.path.lexists(record):
+        return []
+    try:
+        with open(record, encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError, RecursionError):
+        old = None
+    if not (isinstance(old, dict) and old.get("cafe") == "fingerprint" and isinstance(old.get("paths"), list)):
+        raise NotesError(f"{record} exists and is not a fingerprint record, so save will not replace it. "
+                         "Give the record path, .cafe/<order>/served.json. Nothing was saved")
+    return [p for p in old["paths"] if isinstance(p, str)]
+
+
+def save_locked(record, paths, root):
     paths = list(dict.fromkeys(paths))
     record = real(record)
     repos = []
     with InFolder(root):
-        files = served_files(paths, {relative(record, root)}, repos)
+        files = served_files(paths, own_files(record, root), repos)
         walked = {p for p in paths if p != "." and os.path.isdir(p) and not os.path.lexists(os.path.join(p, ".git"))}
         nested = nested_with_changes(set(paths), repos, walked)
     data = {"cafe": "fingerprint", "version": 1, "paths": paths, "files": files}
@@ -583,7 +690,7 @@ def fingerprint_check(record):
         raise NotesError(f"{record} is not a fingerprint record: it needs paths and files")
     root = project_of(record)
     with InFolder(root):
-        new = served_files(paths, {relative(record, root)})
+        new = served_files(paths, own_files(record, root))
     lines = []
     for k in sorted(set(old) | set(new)):
         a, b = old.get(k), new.get(k)
@@ -885,6 +992,48 @@ def self_test():
                 print("  got", files, unborn, saved, absent, nested, states, with_svc)
             print(f"{'ok  ' if ok else 'FAIL'} fingerprint over git: no commit yet, a branch's commits, non-ASCII names, "
                   "renamed, deleted, ignored, .cafe at any depth, nested repositories, from a subfolder")
+
+            repo = os.path.join(d, "hidden")
+            os.makedirs(os.path.join(repo, ".cafe", "o"))
+            os.chdir(repo)
+            wait = os.environ.get("CAFE_LOCK_SECONDS")
+            try:
+                g(".", "init", "-q")
+                nfd = unicodedata.normalize("NFD", "서비스")  # as Finder names a folder; git on macOS prints NFC
+                write(".gitignore", f"svc/\n서비스/\n{nfd}/\n")  # a git that keeps bytes (Linux) matches the NFD line
+                write("svc/lib/l.js", "l1")
+                g("svc/lib", "init", "-q")
+                g("svc/lib", "add", "-A")
+                g("svc/lib", "commit", "-qm", "lib")
+                g("svc", "init", "-q")
+                g("svc", "add", "lib")
+                write("svc/.gitmodules", '[submodule "lib"]\n\tpath = lib\n\turl = ./lib\n\tignore = all\n')
+                g("svc", "add", ".gitmodules")
+                g("svc", "commit", "-qm", "svc")
+                write("svc/lib/l.js", "l2")  # svc's status hides it: its submodule says ignore = all
+                write(os.path.join(nfd, "a.js"), "a")
+                g(nfd, "init", "-q")
+                hidden = [nfc(k) for k in fingerprint_save(".cafe/o/s.json", [])[2]]
+                passed = fingerprint_save(".cafe/o/s.json", ["서비스"])[2]
+                with RecordLock(".cafe/o/s.json"):  # a save still running: the next one waits, then gives up
+                    os.environ["CAFE_LOCK_SECONDS"] = "0.3"
+                    try:
+                        fingerprint_save(".cafe/o/s.json", [])
+                        waited = "saved"
+                    except NotesError:
+                        waited = "refused"
+            except (OSError, subprocess.CalledProcessError) as e:
+                hidden, passed, waited = None, None, None
+                print(f"FAIL hidden changes: a git step failed ({e})")
+            finally:
+                os.environ.pop("CAFE_LOCK_SECONDS", None)
+                if wait is not None:
+                    os.environ["CAFE_LOCK_SECONDS"] = wait
+                os.chdir(here)
+            ok = hidden == ["svc", "서비스"] and passed == ["svc"] and waited == "refused"
+            failed += not ok
+            print(f"{'ok  ' if ok else 'FAIL'} a submodule's ignore setting, an NFD folder passed, a save that waits: "
+                  f"{hidden} {passed} {waited}")
 
         with open(path, "a", encoding="utf-8") as f:
             f.write("2 cup - yes a row split by spaces\n")

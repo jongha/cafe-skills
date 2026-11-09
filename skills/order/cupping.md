@@ -57,7 +57,7 @@ Report, in under 40 lines
 - Acceptance criteria: one line per number
 - Defects: only what breaks an acceptance criterion, loses data, opens a security hole, or crashes. Each: title / criterion broken / how a real customer hits it / repro command / actual output / expected output / file:line
 - Minor: any other flaw, one line each with file:line
-- Ran: the commands you ran, or "none", and the PID of any process you started and could not stop
+- Ran: the commands you ran, or "none", and the PID and command of any process you started and could not stop
 - Next order: ideas outside the recipe worth doing, one line each
 
 Leave out guesses you did not run, naming and style taste, and risks that need some future change to matter.

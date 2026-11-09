@@ -56,6 +56,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 HEADER = ["round", "event", "severity", "tasted", "note"]
 EVENTS = ("size", "cup", "defect", "drop", "recipe", "rebrew")
@@ -291,7 +292,12 @@ SKIP_DIRS = (".git", ".cafe")
 
 
 def digest(path):
-    if not os.path.isfile(path):  # a FIFO or device would block open, a broken link has no content
+    if os.path.islink(path):  # a link's own content is where it points
+        try:
+            return "link " + os.readlink(path)
+        except OSError:
+            return "link"
+    if not os.path.isfile(path):  # a FIFO or device would block open
         return "not a file"
     h = hashlib.sha256()
     try:
@@ -304,14 +310,28 @@ def digest(path):
         except OSError:
             return "unreadable"
         return f"unreadable {st.st_size} {st.st_mtime_ns}"
-    return h.hexdigest()
+    try:
+        executable = os.stat(path).st_mode & 0o111 and " x" or ""  # git tracks the executable bit as a change too
+    except OSError:  # removed right after it was read
+        return "unreadable"
+    return h.hexdigest() + executable
+
+
+# Repository locations a caller may export (a hook, GIT_DIR=...): each git call here names its own folder instead.
+GIT_PLACES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+              "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_PREFIX")
+
+
+def git_env():
+    return {k: v for k, v in os.environ.items() if k not in GIT_PLACES}
 
 
 def git_list(folder, *args):
     """git's names in a folder, split on NUL: with -z git quotes no name (by default it prints a non-ASCII name
     as "\\355\\225..."). Decoded as the file system names them. None where git cannot list here."""
     try:
-        done = subprocess.run(["git", "-C", folder, "-c", "core.quotepath=off", *args], capture_output=True)
+        done = subprocess.run(["git", "--no-optional-locks", "-C", folder, "-c", "core.quotepath=off", *args],
+                              capture_output=True, env=git_env())  # no index refresh written into the user's repositories
     except OSError:
         return None
     if done.returncode:
@@ -320,7 +340,7 @@ def git_list(folder, *args):
 
 
 def own_repository(folder):
-    return os.path.isdir(folder) and os.path.lexists(os.path.join(folder, ".git"))
+    return not os.path.islink(folder) and os.path.isdir(folder) and os.path.lexists(os.path.join(folder, ".git"))
 
 
 def walk(folder):
@@ -329,17 +349,19 @@ def walk(folder):
         yield from (os.path.join(top, n) for n in names)
 
 
-def project_files(folder):
+def project_files(folder, repos):
     """Every file git lists in folder (tracked, and untracked but not ignored), or every file without git.
-    A nested repository git shows as a folder (untracked, or a submodule) is listed by its own git."""
+    A nested repository git shows as a folder (untracked, or a submodule) is listed by its own git. Each
+    repository listed goes into repos, so its own ignored nested repositories can be named."""
     names = git_list(folder, "ls-files", "-z", "-c", "-o", "--exclude-standard")
-    if names is None:
+    if not names:  # no git, or a project inside a folder its parent repository ignores: git lists nothing
         yield from walk(folder)
         return
+    repos.append(folder)
     for name in names:
         path = os.path.join(folder, name.rstrip("/"))
         if own_repository(path):
-            yield from project_files(path)
+            yield from project_files(path, repos)
         else:
             yield path
 
@@ -348,48 +370,185 @@ def key(path):
     return os.path.normpath(path).replace(os.sep, "/")
 
 
-def served_files(paths):
+def served_files(paths, skip=(), repos=None):
     """Every file the project lists, then each given path: a nested repository by its own git, another folder by
-    every file under it, a missing path as None. Keyed by path with / separators; .git and .cafe left out."""
+    every file under it, a missing path as None. Keyed by path with / separators; .git, .cafe, and skip left out."""
+    repos = [] if repos is None else repos
     files = {}
     for path in ["."] + list(paths):
-        if path == "." or own_repository(path):
-            found = project_files(path)
+        if path == "." or (os.path.isdir(path) and os.path.lexists(os.path.join(path, ".git"))):  # a link to one too
+            found = project_files(path, repos)
         elif os.path.isdir(path):
             found = walk(path)
         elif not os.path.lexists(path):
-            files.setdefault(key(path), None)
+            if not set(key(path).split("/")) & set(SKIP_DIRS) and key(path) not in skip:
+                files.setdefault(key(path), None)
             continue
         else:
             found = [path]
         for f in found:
             k = key(f)
-            if not set(k.split("/")) & set(SKIP_DIRS):
+            if not set(k.split("/")) & set(SKIP_DIRS) and k not in skip:
                 files[k] = digest(f) if os.path.lexists(f) else files.get(k)  # tracked but deleted: absent
     return files
 
 
-def nested_with_changes(given):
-    """Nested repositories this project ignores that hold uncommitted changes and were not given as paths."""
-    out = []
-    for name in git_list(".", "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory") or []:
-        folder = name.rstrip("/")
-        if name.endswith("/") and key(folder) not in given and own_repository(folder):
-            if git_list(folder, "status", "--porcelain", "-z"):
-                out.append(key(folder))
+# Folders of dependencies and builds hold other people's repositories, never a tasted file.
+DEPENDENCY_DIRS = {"node_modules", "bower_components", "vendor", ".venv", "venv", "__pycache__", ".tox", ".gradle",
+                   ".next", ".nuxt", ".cache", "build", "dist", "target", "Pods", "DerivedData", ".godot"}
+
+
+def repositories_below(folder, depth=3):
+    """Repositories under an ignored folder that is not one itself, down to depth levels."""
+    if depth == 0 or os.path.basename(folder) in DEPENDENCY_DIRS:
+        return
+    try:
+        entries = sorted(os.scandir(folder), key=lambda e: e.name)
+    except OSError:
+        return
+    for e in entries:
+        if e.is_dir(follow_symlinks=False) and e.name not in SKIP_DIRS:
+            if own_repository(e.path):
+                yield e.path
+            else:
+                yield from repositories_below(e.path, depth - 1)
+
+
+def nested_with_changes(given, repos, walked=()):
+    """Nested repositories that a listed repository ignores, that hold uncommitted changes, and that were not given.
+    git folds an ignored folder into one entry (repos/), so a folder that is not a repository is searched below."""
+    def covered(k):  # given as the repository itself, or under a plain folder walked whole. A path inside it records
+        # only that path, and a given repository's own git leaves out the repositories it ignores: neither covers k
+        return any(g == k or (k.startswith(g + "/") and g in walked) for g in given)
+
+    out, seen, todo = [], set(), list(repos)
+    while todo:
+        repo = todo.pop(0)
+        for name in git_list(repo, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory") or []:
+            top = os.path.join(repo, name.rstrip("/"))
+            if not name.endswith("/") or os.path.basename(top) in DEPENDENCY_DIRS:
+                continue
+            for found in [top] if own_repository(top) else repositories_below(top):
+                k = key(found)
+                if k in seen:
+                    continue
+                seen.add(k)
+                todo.append(found)  # its own ignored repositories too
+                if not covered(k) and git_list(found, "status", "--porcelain", "-z", "--untracked-files=normal"):  # whatever the config hides
+                    out.append(k)
     return out
+
+
+def real(path):
+    """An absolute path whose folders have no symlink (macOS /tmp is /private/tmp), keeping the last name as given."""
+    path = os.path.abspath(path)
+    return os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path))
+
+
+def true_case(folder, names):
+    """names as the disk spells them (macOS matches SVC to svc), each kept as typed when no entry matches."""
+    out = []
+    for name in names:
+        try:
+            entries = os.listdir(folder)
+        except OSError:
+            entries = []
+        if name not in entries:
+            fold = unicodedata.normalize("NFC", name).lower()  # Finder writes NFD, a typed name is NFC
+            same = [e for e in entries if unicodedata.normalize("NFC", e).lower() == fold]
+            try:
+                name = next(e for e in same if os.path.samefile(os.path.join(folder, e), os.path.join(folder, name)))
+            except (StopIteration, OSError):
+                pass
+        out.append(name)
+        folder = os.path.join(folder, name)
+    return out
+
+
+def relative(path, root):
+    """path relative to root, found by the folders' identity, so letter case (macOS) and links give one name."""
+    path = real(path)
+    rest, here = [], path
+    while True:
+        try:
+            if os.path.samefile(here, root):
+                return key(os.path.join(*true_case(root, list(reversed(rest))))) if rest else "."
+        except OSError:
+            pass
+        parent = os.path.dirname(here)
+        if parent == here:
+            return key(os.path.relpath(path, root))
+        rest.append(os.path.basename(here))
+        here = parent
+
+
+def outside_root(record):
+    """The record's folder must already exist: run from another folder, the project-root path names a new one."""
+    folder = os.path.dirname(os.path.abspath(record))
+    if not os.path.isdir(folder):
+        raise NotesError(f"{folder} does not exist: cafe.py ran outside the project root, or the order folder's name "
+                         f"is wrong, so {record} names the wrong folder. Run it again from the project root")
+
+
+def project_of(record):
+    """The project a record belongs to: the folder holding the .cafe it sits in (so check works from any folder,
+    and the record moves with the project), else the folder save or check runs from."""
+    parts = os.path.abspath(record).split(os.sep)  # before links are resolved: .cafe itself may be a link
+    if ".cafe" in parts[:-1]:
+        i = len(parts) - 1 - parts[::-1].index(".cafe")
+        return os.path.realpath(os.sep.join(parts[:i]) or os.sep)
+    try:
+        return os.path.realpath(os.getcwd())
+    except FileNotFoundError:
+        raise NotesError("the folder cafe.py ran from was deleted. Run it again from the project root")
+
+
+class InFolder:
+    def __init__(self, folder):
+        try:
+            self.back = os.getcwd()
+        except FileNotFoundError:  # the folder it ran from was deleted: nothing to go back to
+            self.back = None
+        self.folder = folder
+
+    def __enter__(self):
+        os.chdir(self.folder)
+
+    def __exit__(self, *exc):
+        if self.back is not None:
+            os.chdir(self.back)
 
 
 def fingerprint_save(record, paths):
     """Record every file the project lists and the given paths. Returns the number of files recorded, the paths
     recorded as absent (deleted, or a wrong name), and the nested repositories with changes left out."""
-    paths = list(dict.fromkeys(paths))
+    record = os.path.normpath(record)  # cupping.tsv/ or a/../cupping.tsv is that file: the guard and the write see one path
     for p in paths:
         if len(p) > 1 and p[0] == p[-1] == '"' and not os.path.lexists(p):
             raise NotesError(f"{p} is not there and looks like a name git quoted. Give the name as the file system "
                              "has it (git -z prints it so). Nothing was saved")
-    data = {"cafe": "fingerprint", "version": 1, "paths": paths, "files": served_files(paths)}
-    folder = os.path.dirname(os.path.abspath(record))
+    outside_root(record)
+    root = project_of(record)
+    paths = [relative(p.rstrip("/\\") or p, root) for p in paths]  # one name for each form
+    if os.path.lexists(record):  # replace only a record: a mixed-up argument must not overwrite the notes or a source
+        try:
+            with open(record, encoding="utf-8") as f:
+                old = json.load(f)
+        except (OSError, ValueError, RecursionError):
+            old = None
+        if not (isinstance(old, dict) and old.get("cafe") == "fingerprint" and isinstance(old.get("paths"), list)):
+            raise NotesError(f"{record} exists and is not a fingerprint record, so save will not replace it. "
+                             "Give the record path, .cafe/<order>/served.json. Nothing was saved")
+        paths = [p for p in old["paths"] if isinstance(p, str)] + paths  # saving again keeps the paths given before
+    paths = list(dict.fromkeys(paths))
+    record = real(record)
+    repos = []
+    with InFolder(root):
+        files = served_files(paths, {relative(record, root)}, repos)
+        walked = {p for p in paths if p != "." and os.path.isdir(p) and not os.path.lexists(os.path.join(p, ".git"))}
+        nested = nested_with_changes(set(paths), repos, walked)
+    data = {"cafe": "fingerprint", "version": 1, "paths": paths, "files": files}
+    folder = os.path.dirname(record)
     try:
         os.makedirs(folder, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=folder, prefix=".fingerprint.")
@@ -402,27 +561,29 @@ def fingerprint_save(record, paths):
             raise
     except OSError as e:
         raise NotesError(f"cannot save {record}: {e}. Nothing was saved")
-    files = data["files"]
-    return (sum(v is not None for v in files.values()), [k for k, v in files.items() if v is None],
-            nested_with_changes({key(p) for p in paths}))
+    return sum(v is not None for v in files.values()), [k for k, v in files.items() if v is None], nested
 
 
 def fingerprint_check(record):
     """("same" | "changed" | "no record", lines): every file the project lists and the recorded paths, against the record."""
+    record = os.path.normpath(record)
     if not os.path.exists(record):
+        outside_root(record)
         return "no record", [f"nothing saved at {record}"]
     try:
         with open(record, encoding="utf-8") as f:
             data = json.load(f)
-    except (OSError, ValueError) as e:
-        raise NotesError(f"{record} is not a fingerprint record: {e}")
+    except (OSError, ValueError, RecursionError) as e:
+        raise NotesError(f"{record} is not a fingerprint record: {e!r}"[:300])
     if not isinstance(data, dict):
         data = {}
     paths, old = data.get("paths"), data.get("files")
     if (data.get("cafe") != "fingerprint" or not isinstance(paths, list)
             or not all(isinstance(p, str) for p in paths) or not isinstance(old, dict)):
         raise NotesError(f"{record} is not a fingerprint record: it needs paths and files")
-    new = served_files(paths)
+    root = project_of(record)
+    with InFolder(root):
+        new = served_files(paths, {relative(record, root)})
     lines = []
     for k in sorted(set(old) | set(new)):
         a, b = old.get(k), new.get(k)
@@ -616,6 +777,7 @@ def self_test():
 
         tree = os.path.join(d, "served")
         os.makedirs(os.path.join(tree, "src", ".cafe"))
+        os.makedirs(os.path.join(tree, ".cafe", "o"))  # the order's folder exists by SERVE
         for name, text in (("a.txt", "a"), ("src/b.txt", "b"), ("src/.cafe/x", "x")):
             with open(os.path.join(tree, name), "w", encoding="utf-8") as f:
                 f.write(text)
@@ -647,10 +809,12 @@ def self_test():
             f.write("[1, 2]")
         expect_error("a record that is not a fingerprint", lambda: fingerprint_check(record))
         expect_error("a name git quoted", lambda: fingerprint_save(record, ['"\\355\\225\\234.md"']))
+        expect_error("a save run outside the project root", lambda: fingerprint_save(os.path.join(tree, "src", ".cafe", "o", "s.json"), []))
+        expect_error("a check run outside the project root", lambda: fingerprint_check(os.path.join(tree, "src", ".cafe", "o", "s.json")))
 
-        def g(folder, *args):
+        def g(folder, *args):  # git_env: an exported GIT_DIR must not send these commits to the caller's repository
             subprocess.run(["git", "-C", folder, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
-                            "-c", "core.hooksPath=/dev/null", *args], check=True, capture_output=True)
+                            "-c", "core.hooksPath=/dev/null", *args], check=True, capture_output=True, env=git_env())
 
         def write(name, text):
             os.makedirs(os.path.dirname(name) or ".", exist_ok=True)
@@ -661,11 +825,11 @@ def self_test():
             print("skip fingerprint over git: no git on this host")
         else:
             repo = os.path.join(d, "repo")
-            os.makedirs(repo)
+            os.makedirs(os.path.join(repo, ".cafe"))
             os.chdir(repo)
             try:
                 g(".", "init", "-q")
-                for name, text in (("한글 이름.md", "a"), ("old.txt", "o"), ("keep.txt", "k"), (".gitignore", "*.log\nsvc/\n")):
+                for name, text in (("한글 이름.md", "a"), ("old.txt", "o"), ("keep.txt", "k"), (".gitignore", "*.log\nsvc/\nrepos/\n")):
                     write(name, text)
                 unborn = fingerprint_save(".cafe/unborn.json", [])[0]  # no commit yet
                 g(".", "add", "-A")
@@ -684,32 +848,43 @@ def self_test():
                 g("inner", "add", "-A")
                 g("inner", "commit", "-qm", "inner")
                 g("svc", "init", "-q")
+                g("svc", "config", "status.showUntrackedFiles", "no")  # a setting that hides svc's only change from status
+                write("svc/.gitignore", "inner/\n")  # svc ignores a repository of its own, as a worktree folder is
+                write("svc/inner/i.js", "i")
+                g("svc/inner", "init", "-q")
+                write("repos/group/c/app.js", "c")  # a repository two levels under an ignored plain folder
+                g("repos/group/c", "init", "-q")
                 saved, absent, nested = fingerprint_save(".cafe/served.json", [])
                 files = sorted(json.load(open(".cafe/served.json", encoding="utf-8"))["files"])
                 g(".", "add", "-A")
                 g(".", "commit", "-qm", "served")
                 states = [fingerprint_check(".cafe/served.json")[0]]
+                os.chdir("inner")
+                states[0] += " " + fingerprint_check("../.cafe/served.json")[0]  # from a subfolder: the same answer
+                os.chdir("..")
                 write("keep.txt", "back")
                 states.append(fingerprint_check(".cafe/served.json"))
                 os.remove("keep.txt")
                 write("inner/app.js", "a2")
                 states.append(fingerprint_check(".cafe/served.json"))
                 with_svc = fingerprint_save(".cafe/svc.json", ["svc"])
+                part = fingerprint_save(".cafe/part.json", ["repos/group/c/app.js"])  # a file in it does not cover it
             except (OSError, subprocess.CalledProcessError) as e:
-                files, states, with_svc = None, None, None
+                files, states, with_svc, part = None, None, None, None
                 print(f"FAIL fingerprint over git: a git step failed ({e})")
             finally:
                 os.chdir(here)
             ok = (files == [".gitignore", "feature.py", "inner/.gitignore", "inner/app.js", "moved.txt", "old.txt",
                             "새 파일.txt", "한글 이름.md"]
-                  and unborn == 4 and saved == 7 and absent == ["old.txt"] and nested == ["svc"]
-                  and states == ["same", ("changed", ["added: keep.txt"]), ("changed", ["changed: inner/app.js"])]
-                  and with_svc[2] == [] and with_svc[0] == 8)  # the 7 still there and svc/x.ts
+                  and unborn == 4 and saved == 7 and absent == ["old.txt"] and nested == ["repos/group/c", "svc", "svc/inner"]
+                  and states == ["same same", ("changed", ["added: keep.txt"]), ("changed", ["changed: inner/app.js"])]
+                  and with_svc[2] == ["repos/group/c", "svc/inner"] and with_svc[0] == 9
+                  and "repos/group/c" in part[2])  # the 7, svc/x.ts, svc/.gitignore
             failed += not ok
             if not ok:
                 print("  got", files, unborn, saved, absent, nested, states, with_svc)
             print(f"{'ok  ' if ok else 'FAIL'} fingerprint over git: no commit yet, a branch's commits, non-ASCII names, "
-                  "renamed, deleted, ignored, .cafe at any depth, nested repositories")
+                  "renamed, deleted, ignored, .cafe at any depth, nested repositories, from a subfolder")
 
         with open(path, "a", encoding="utf-8") as f:
             f.write("2 cup - yes a row split by spaces\n")
@@ -771,10 +946,18 @@ def main():
                       "that went in). To log the same rows again, tell them apart in the note"])
             return 0
         if args.cmd == "check":
+            if not os.path.exists(args.notes):
+                outside_root(args.notes)  # no notes and no order folder: run from a subfolder, not "no rounds yet"
             verdict, reasons = judge(read_notes(args.notes), args.max_rounds, args.notes)
             emit([verdict] + [f"  {line}" for line in reasons])
             return 0 if verdict == "SERVE" else 1
         if args.cmd == "fingerprint":
+            try:
+                os.getcwd()
+            except FileNotFoundError:  # the folder it ran from was deleted: an absolute record still names its project
+                if not os.path.isabs(args.record):
+                    raise NotesError("the folder cafe.py ran from was deleted. Run it again from the project root")
+                os.chdir(project_of(args.record) if ".cafe" in args.record.split(os.sep) else os.path.dirname(args.record))
             if args.fp == "save":
                 n, absent, nested = fingerprint_save(args.record, args.paths)
                 emit([f"saved {n} file(s) to {args.record}"] + [f"  absent (deleted, or a wrong name): {p}" for p in absent]
@@ -787,7 +970,8 @@ def main():
         return self_test()
     except NotesError as e:
         try:
-            print(f"notes error: {e}", file=sys.stderr)
+            if sys.stderr is not None:  # closed: say nothing rather than print the error as if it were output
+                print(f"notes error: {e}", file=sys.stderr)
         except BrokenPipeError:  # a closed stderr changes no exit code
             pass
         return 2

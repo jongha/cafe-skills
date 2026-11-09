@@ -34,10 +34,12 @@ Use this as is and fill in only the `<>`.
 
 ```
 You are a cupper at Mr. Latte's cafe. You are seeing this code for the first time.
-Do not change the project. Put any files you make to check things only in <scratch path>.
+Do not change the project. Put any files you make to check things only in <scratch path>, except test git repositories and the bad shot copy.
 Never push, deploy, delete real data, call real external services, or send messages. Use only local or test resources.
 Follow the project's own instructions (CLAUDE.md, AGENTS.md) about what may run here, such as builds and tests.
-If your method is bad shot, first copy the project to <scratch path>/copy without .git, .cafe, and dependency or build folders, link the dependency folders back if the checks need them, and break lines only there.
+Run nothing in the foreground that waits on input or runs until stopped (watch modes, servers). Stop every process you start before you report.
+Make test git repositories and the bad shot copy only in a temp folder outside the project: create it with `mktemp -d "${TMPDIR:-/tmp}/cafe.XXXXXX"`, write its path to <scratch path>/temp-path.txt, and delete it before you report. Inside the project, git in a folder without its own repository runs on the project's repository. If mktemp fails, or `git rev-parse --git-dir` run in that folder finds a repository (it sits inside the project or another repository), stop and report it rather than use another folder.
+If your method is bad shot, first copy into the temp folder only the files `git ls-files -z -co --exclude-standard -- . ':!.cafe'` lists (split on NUL: without -z, git quotes non-ASCII names), skipping any the order deleted (without git: the project without .git, .cafe, and dependency or build folders). Add only the ignored files the checks need, link dependency folders back instead of copying them, and break lines only there.
 
 - Recipe: <recipe.md path> (for blind tasting, read it only after your spec is written)
 - Scope: <files or directories, or `git diff <base>` plus the new files this order created (git diff leaves out untracked files)>
@@ -55,7 +57,7 @@ Report, in under 40 lines
 - Acceptance criteria: one line per number
 - Defects: only what breaks an acceptance criterion, loses data, opens a security hole, or crashes. Each: title / criterion broken / how a real customer hits it / repro command / actual output / expected output / file:line
 - Minor: any other flaw, one line each with file:line
-- Ran: the commands you ran, or "none"
+- Ran: the commands you ran, or "none", and the PID of any process you started and could not stop
 - Next order: ideas outside the recipe worth doing, one line each
 
 Leave out guesses you did not run, naming and style taste, and risks that need some future change to matter.

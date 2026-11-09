@@ -5,6 +5,8 @@
   cafe.py add-rows <notes>   rows on stdin, one per line, each written as add's arguments after <notes>.
                              All rows are written or none, so a fixed batch can be rerun as a whole.
   cafe.py check <notes> [--max-rounds N]
+  cafe.py version            prints "cafe v<version>" from the cafe plugin.json beside the real script,
+                             or "cafe v?" without one. Progress lines start with it.
   cafe.py self-test
 
 events
@@ -32,6 +34,7 @@ A clean round has the size's cuppers, at least 1 cupper that ran something, and 
 Exit code: 0 for SERVE, 1 for any other verdict, 2 for a bad notes file.
 """
 import argparse
+import json
 import os
 import shlex
 import sys
@@ -249,6 +252,23 @@ def judge(rows, max_rounds=None, notes="<notes>"):
     return "RECUP", reasons
 
 
+def version(script=__file__):
+    """The version in the cafe plugin.json at the root of the real skill folder, or "?" without one.
+    plugin.json is the only place the version is written, so a progress line cannot show a stale one."""
+    root = os.path.realpath(script)
+    for _ in range(4):  # scripts/cafe.py -> order -> skills -> the repository or plugin root
+        root = os.path.dirname(root)
+    try:
+        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8-sig") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        return "?"
+    if not isinstance(manifest, dict) or manifest.get("name") != "cafe":
+        return "?"
+    found = manifest.get("version")
+    return found.strip() if isinstance(found, str) and found.strip() else "?"
+
+
 def self_test():
     def notes(*specs):
         return [s if len(s) == 5 else (*s, "t") for s in specs]
@@ -369,6 +389,19 @@ def self_test():
             f.write("2 cup - yes a row split by spaces\n")
         expect_error("row not split by tabs", lambda: read_notes(path))
 
+        script = os.path.join(d, "root", "skills", "order", "scripts", "cafe.py")
+        manifest = os.path.join(d, "root", ".claude-plugin", "plugin.json")
+        got = [version(script)]
+        os.makedirs(os.path.dirname(manifest))
+        for text in ('{"name": "cafe", "version": "9.8.7"}', '﻿{"name": "cafe", "version": "9.8.6"}',
+                     '{"name": "other", "version": "1.0.0"}', '{"name": "cafe"}', "{not json"):
+            with open(manifest, "w", encoding="utf-8") as f:
+                f.write(text)
+            got.append(version(script))
+        ok = got == ["?", "9.8.7", "9.8.6", "?", "?", "?"]
+        failed += not ok
+        print(f"{'ok  ' if ok else 'FAIL'} version reads only the cafe plugin.json: {got}")
+
     print("self-test", "passed" if not failed else f"failed {failed}")
     return 0 if not failed else 1
 
@@ -384,9 +417,13 @@ def main():
     c = sub.add_parser("check", help="decide whether it is ready to serve")
     c.add_argument("notes")
     c.add_argument("--max-rounds", type=int, default=None, help="override the size's round limit")
+    sub.add_parser("version", help='print "cafe v<version>" for the progress lines')
     sub.add_parser("self-test", help="check the verdict rules")
     args = p.parse_args()
 
+    if args.cmd == "version":
+        print(f"cafe v{version()}")
+        return 0
     try:
         if args.cmd == "add":
             add(args.notes, args.round, args.event, args.severity, args.tasted, args.note)

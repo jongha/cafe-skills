@@ -33,7 +33,7 @@ AI-built work has a familiar loop. You review it and find problems. You fix them
 
 - **Finished means finished.** Only `cafe.py check` can end the work, not the AI's own sense of being done. If the work does not converge within its round limit, the report says so.
 - **Sized to the order.** A one-file fix gets one cupper a round. A feature across layers gets three. The judge script holds each order to its size.
-- **You can see where it is.** Each step prints one line, such as `[cafe 3/4 Cupping R1] 1 cupper tasting: Customer x Order sheet`, and the steps show up in the host's task list or plan.
+- **You can see where it is.** Each step prints one line that starts with the skill version, such as `[cafe v0.2.2 3/4 Cupping R1] 1 cupper tasting: Customer x Order sheet`, and the steps show up in the host's task list or plan.
 - **Evidence, not opinions.** A finding counts only with a command and its output, a failing test, or the line and the criterion it breaks.
 - **A second opinion without a second AI.** Fresh subagents with new viewpoints and methods do what another AI would.
 - **Fewer interruptions.** Ordinary choices become written assumptions. Host approval requirements still apply. It pushes, deploys, or deletes data only when your order says so and verification passes.
@@ -78,7 +78,7 @@ A small order costs about as much as one review. A large one costs more, and in 
 - **Methods.** 30 complaints (list ways it could fail in real use, up to 5, 10, or 30 by size, then run each), order sheet (a table of edge-case inputs to run), bad shot (break a line on purpose and see if a check catches it), and blind tasting (write a spec from the code alone, then compare it with the recipe).
 - **House notes.** Each defect a round missed adds a line to `.cafe/house-notes.md`. Every later cupper reads that file first.
 
-**When it ends.** A clean round has the size's full set of cuppers, at least one cupper that actually ran something, and no P0 or P1 defects. S and M serve after one clean round, L after two in a row. P0 and P1 count only what can happen in real use, so the bar does not creep toward contrived cases. Changing the recipe resets the count, so a late change can end in CLOSE. If serious defects stop going down, the verdict is REBREW, which means stop patching and recheck the design. At the round limit (3, 4, or 5 by size) the verdict is CLOSE, and the report says the work did not converge.
+**When it ends.** A clean round has the size's full set of cuppers, at least one cupper that actually ran something, and no P0 or P1 defects. S and M serve after one clean round, L after two in a row. P0 and P1 count only what can happen in real use, so the bar does not creep toward contrived cases. Changing the recipe resets the count, so a late change can end in CLOSE. If serious defects stop going down, the verdict is REBREW, which means stop patching and recheck the design. At the round limit (3, 4, or 5 by size) the verdict is CLOSE, and the report says the work did not converge. Ordering the same goal again after CLOSE starts a new order with a fresh round limit, and the defects still open become its acceptance criteria.
 
 ### Install
 
@@ -195,7 +195,7 @@ AI로 만든 결과물은 리뷰할 때마다 새 문제가 나옵니다. 고치
 
 - **끝났다고 하면 정말 끝난 것입니다.** 작업을 끝내는 것은 AI의 느낌이 아니라 `cafe.py check`입니다. 라운드 한도 안에 수렴하지 않으면 그렇다고 보고합니다.
 - **주문 크기만큼만 맛봅니다.** 파일 하나를 고치는 주문은 라운드마다 커퍼가 하나이고, 여러 층에 걸친 기능은 셋입니다. 판정 스크립트가 주문마다 정한 크기를 지킵니다.
-- **지금 어디쯤인지 보입니다.** 단계마다 `[cafe 3/4 커핑 R1] 커퍼 1명 맛보는 중: 손님 x 주문표` 같은 한 줄을 남기고, 도구의 작업 목록에도 단계가 뜹니다.
+- **지금 어디쯤인지 보입니다.** 단계마다 스킬 버전으로 시작하는 `[cafe v0.2.2 3/4 커핑 R1] 커퍼 1명 맛보는 중: 손님 x 주문표` 같은 한 줄을 남기고, 도구의 작업 목록에도 단계가 뜹니다.
 - **의견이 아니라 증거만 남습니다.** 명령과 출력, 실패하는 테스트, 또는 어긴 수용 기준과 코드 위치가 있어야 지적으로 인정합니다.
 - **AI 하나로 두 번째 의견을 얻습니다.** 새 관점과 방법을 받은 새 서브에이전트가 다른 AI의 몫을 합니다.
 - **불필요한 질문을 줄입니다.** 일반적인 선택은 가정으로 적어 보고서에 남깁니다. 실행 환경의 승인 절차는 따릅니다. 푸시, 배포, 데이터 삭제는 주문에 적혀 있고 검증을 통과했을 때만 합니다.
@@ -244,7 +244,7 @@ AI로 만든 결과물은 리뷰할 때마다 새 문제가 나옵니다. 고치
   - 블라인드 테이스팅: 레시피를 보지 않고 코드만으로 명세를 쓴 뒤 레시피와 견줍니다.
 - **하우스 노트.** 라운드가 놓친 디펙트마다 `.cafe/house-notes.md`에 한 줄이 쌓입니다. 이후의 모든 커퍼가 이 파일을 먼저 읽습니다.
 
-**언제 끝나나.** 깨끗한 라운드는 그 크기의 커퍼가 다 있고, 실제로 돌려 본 커퍼가 하나 이상이고, P0, P1 디펙트가 없는 라운드입니다. S와 M은 깨끗한 라운드 한 번, L은 연속 두 번이면 서빙합니다. P0, P1은 실제 사용에서 일어날 수 있는 것만 셉니다. 그래야 기준이 억지 사례 쪽으로 끝없이 올라가지 않습니다. 레시피를 고치면 처음부터 다시 셉니다. 그래서 늦게 고치면 CLOSE로 끝날 수 있습니다. 심각한 디펙트 수가 줄지 않으면 REBREW가 나옵니다. 땜질을 멈추고 설계를 다시 보라는 뜻입니다. 라운드 한도(크기에 따라 3, 4, 5)를 채우고도 끝나지 않으면 CLOSE가 나오고, 수렴하지 못했다고 그대로 보고합니다.
+**언제 끝나나.** 깨끗한 라운드는 그 크기의 커퍼가 다 있고, 실제로 돌려 본 커퍼가 하나 이상이고, P0, P1 디펙트가 없는 라운드입니다. S와 M은 깨끗한 라운드 한 번, L은 연속 두 번이면 서빙합니다. P0, P1은 실제 사용에서 일어날 수 있는 것만 셉니다. 그래야 기준이 억지 사례 쪽으로 끝없이 올라가지 않습니다. 레시피를 고치면 처음부터 다시 셉니다. 그래서 늦게 고치면 CLOSE로 끝날 수 있습니다. 심각한 디펙트 수가 줄지 않으면 REBREW가 나옵니다. 땜질을 멈추고 설계를 다시 보라는 뜻입니다. 라운드 한도(크기에 따라 3, 4, 5)를 채우고도 끝나지 않으면 CLOSE가 나오고, 수렴하지 못했다고 그대로 보고합니다. CLOSE 뒤에 같은 목표를 다시 주문하면 새 주문으로 시작해 라운드 한도를 처음부터 다시 받고, 남은 디펙트는 그 주문의 수용 기준이 됩니다.
 
 ### 설치
 
